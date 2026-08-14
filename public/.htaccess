@@ -13,10 +13,10 @@
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-    # Força HTTPS (o cPanel/AutoSSL já emite o certificado). Comente se ainda
-    # não tiver SSL ativo no subdomínio.
-    RewriteCond %{HTTPS} off
-    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+    # Força HTTPS. DESATIVADO por padrão: só ative (tire os #) DEPOIS que o
+    # AutoSSL do subdomínio estiver emitido — senão o acesso quebra.
+    # RewriteCond %{HTTPS} off
+    # RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
     # Remove barra final redundante (exceto em diretórios)
     RewriteCond %{REQUEST_FILENAME} !-d

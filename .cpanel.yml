@@ -1,0 +1,19 @@
+---
+deployment:
+  tasks:
+    # Diretório raiz da aplicação (um nível acima do document root /public).
+    # Ajuste se o caminho absoluto da sua conta for diferente.
+    - export DEPLOYPATH=/home1/ecoman77/deposito-flash
+    # Copia o código para o diretório de produção (merge, sem apagar .env nem
+    # storage/app). Como .env não está no repositório, ele é preservado.
+    - /bin/cp -R app "$DEPLOYPATH"
+    - /bin/cp -R bootstrap "$DEPLOYPATH"
+    - /bin/cp -R config "$DEPLOYPATH"
+    - /bin/cp -R database "$DEPLOYPATH"
+    - /bin/cp -R public "$DEPLOYPATH"
+    - /bin/cp -R resources "$DEPLOYPATH"
+    - /bin/cp -R routes "$DEPLOYPATH"
+    - /bin/cp -R vendor "$DEPLOYPATH"
+    - /bin/cp artisan "$DEPLOYPATH"
+    - /bin/cp composer.json "$DEPLOYPATH"
+    - /bin/cp composer.lock "$DEPLOYPATH"
