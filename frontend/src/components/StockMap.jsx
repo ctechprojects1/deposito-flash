@@ -2,26 +2,23 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchLocations } from "../services/api";
 import LocationModal from "./LocationModal";
 
-/**
- * Limiares de estoque para a cor do bloco.
- * A métrica usada é a quantidade total guardada no local.
- */
 const LIMITE_BAIXO = 10;
 
-/**
- * Retorna as classes Tailwind do bloco conforme a quantidade total:
- *   0            -> Vermelho (vazio)
- *   1 a 10       -> Amarelo  (estoque baixo)
- *   acima de 10  -> Verde    (estoque ok)
- */
+/** Cor do bloco conforme a quantidade total no endereço. */
 function corDoBloco(quantidade) {
-  if (quantidade <= 0) {
-    return "bg-red-500 hover:bg-red-600 border-red-700";
-  }
-  if (quantidade < LIMITE_BAIXO) {
+  if (quantidade <= 0) return "bg-red-500 hover:bg-red-600 border-red-700 text-white";
+  if (quantidade < LIMITE_BAIXO)
     return "bg-yellow-400 hover:bg-yellow-500 border-yellow-600 text-gray-900";
-  }
-  return "bg-green-500 hover:bg-green-600 border-green-700";
+  return "bg-green-500 hover:bg-green-600 border-green-700 text-white";
+}
+
+/** Extrai nível (número) e lado (A/B) da posição "1A", "2B"... */
+function parsePosicao(esteira) {
+  const m = String(esteira || "").match(/(\d+)\s*([A-Za-z]?)/);
+  return {
+    nivel: m ? parseInt(m[1], 10) : 0,
+    lado: m && m[2] ? m[2].toUpperCase() : "A",
+  };
 }
 
 export default function StockMap() {
@@ -34,8 +31,7 @@ export default function StockMap() {
     try {
       setLoading(true);
       setErro(null);
-      const dados = await fetchLocations();
-      setLocations(dados);
+      setLocations(await fetchLocations());
     } catch (e) {
       setErro("Não foi possível carregar o mapa. Verifique a API.");
       console.error(e);
@@ -48,29 +44,32 @@ export default function StockMap() {
     carregar();
   }, []);
 
-  // Descobre o tamanho do grid a partir das coordenadas dos locais.
-  const { colunas, linhas } = useMemo(() => {
-    const maxX = Math.max(1, ...locations.map((l) => l.eixo_x || 0));
-    const maxY = Math.max(1, ...locations.map((l) => l.eixo_y || 0));
-    return { colunas: maxX, linhas: maxY };
+  // Agrupa por Time (corredor). Se não houver corredor, cai no nome.
+  const times = useMemo(() => {
+    const grupos = new Map();
+    for (const loc of locations) {
+      const time = loc.corredor || loc.nome || "—";
+      if (!grupos.has(time)) grupos.set(time, []);
+      grupos.get(time).push(loc);
+    }
+    // Ordena os Times pela menor coordenada x (mantém a ordem da parede).
+    return Array.from(grupos.entries())
+      .map(([time, locs]) => ({
+        time,
+        locs,
+        ordem: Math.min(...locs.map((l) => l.eixo_x || 9999)),
+      }))
+      .sort((a, b) => a.ordem - b.ordem || a.time.localeCompare(b.time));
   }, [locations]);
 
   if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center text-gray-500">
-        Carregando mapa do armazém...
-      </div>
-    );
+    return <div className="flex h-64 items-center justify-center text-gray-500">Carregando mapa...</div>;
   }
-
   if (erro) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3">
         <p className="text-red-600">{erro}</p>
-        <button
-          onClick={carregar}
-          className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-        >
+        <button onClick={carregar} className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
           Tentar novamente
         </button>
       </div>
@@ -80,60 +79,79 @@ export default function StockMap() {
   return (
     <div className="mx-auto max-w-6xl p-4">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-gray-800">
-          Mapa do Armazém
-        </h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Mapa do Armazém</h1>
+          <p className="text-sm text-gray-500">{times.length} times · {locations.length} endereços</p>
+        </div>
         <Legenda />
       </header>
 
-      {/* Planta do armazém em CSS Grid.
-          Cada bloco é posicionado por eixo_x (coluna) e eixo_y (linha). */}
-      <div
-        className="grid gap-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4"
-        style={{
-          gridTemplateColumns: `repeat(${colunas}, minmax(90px, 1fr))`,
-          gridTemplateRows: `repeat(${linhas}, minmax(90px, auto))`,
-        }}
-      >
-        {locations.map((local) => {
-          const quantidade = Number(local.total_quantidade ?? 0);
-          return (
-            <button
-              key={local.id}
-              onClick={() => setSelecionado(local)}
-              title={`${local.nome} — ${quantidade} un.`}
-              style={{
-                // Se o local tem coordenadas, posiciona no grid; senão fluxo normal.
-                gridColumn: local.eixo_x ? local.eixo_x : "auto",
-                gridRow: local.eixo_y ? local.eixo_y : "auto",
-              }}
-              className={`flex flex-col items-center justify-center rounded-lg border-2 p-2 text-center font-semibold text-white shadow-sm transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-400 ${corDoBloco(
-                quantidade
-              )}`}
-            >
-              <span className="text-sm leading-tight">{local.nome}</span>
-              <span className="mt-1 text-xs opacity-90">
-                {local.total_itens} item(s)
-              </span>
-              <span className="text-xs opacity-90">{quantidade} un.</span>
-            </button>
-          );
-        })}
+      {/* Times em cartões que fluem verticalmente (responsivo). */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {times.map(({ time, locs }) => (
+          <CartaoTime key={time} time={time} locs={locs} onSelecionar={setSelecionado} />
+        ))}
       </div>
 
       {selecionado && (
-        <LocationModal
-          location={selecionado}
-          onClose={() => setSelecionado(null)}
-        />
+        <LocationModal location={selecionado} onClose={() => setSelecionado(null)} />
       )}
     </div>
   );
 }
 
-/**
- * Legenda das cores.
- */
+/** Cartão de um Time com sua mini-grade de posições (A | B por nível). */
+function CartaoTime({ time, locs, onSelecionar }) {
+  // Indexa por "nivel-lado" e descobre níveis presentes.
+  const porChave = new Map();
+  const niveis = new Set();
+  let temB = false;
+  for (const l of locs) {
+    const { nivel, lado } = parsePosicao(l.esteira);
+    porChave.set(`${nivel}-${lado}`, l);
+    niveis.add(nivel);
+    if (lado === "B") temB = true;
+  }
+  const niveisOrd = Array.from(niveis).sort((a, b) => a - b);
+  const lados = temB ? ["A", "B"] : ["A"];
+
+  const totalTime = locs.reduce((s, l) => s + Number(l.total_quantidade || 0), 0);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h3 className="font-bold text-gray-800">{time}</h3>
+        <span className="text-xs text-gray-400">{totalTime} un.</span>
+      </div>
+
+      <div className="space-y-1.5">
+        {niveisOrd.map((nivel) => (
+          <div key={nivel} className="flex gap-1.5">
+            {lados.map((lado) => {
+              const loc = porChave.get(`${nivel}-${lado}`);
+              if (!loc) {
+                return <div key={lado} className="h-12 flex-1 rounded-lg border border-dashed border-gray-200" />;
+              }
+              const q = Number(loc.total_quantidade || 0);
+              return (
+                <button
+                  key={lado}
+                  onClick={() => onSelecionar(loc)}
+                  title={`${loc.nome} — ${q} un.`}
+                  className={`flex h-12 flex-1 flex-col items-center justify-center rounded-lg border-2 text-center transition hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-blue-400 ${corDoBloco(q)}`}
+                >
+                  <span className="text-xs font-bold leading-none">{loc.esteira}</span>
+                  <span className="mt-0.5 text-[10px] leading-none opacity-90">{q}</span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Legenda() {
   const itens = [
     { cor: "bg-red-500", texto: "Vazio (0)" },
