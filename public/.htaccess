@@ -1,0 +1,49 @@
+# =============================================================================
+#  public/.htaccess — Front controller do Laravel + assets do React
+# =============================================================================
+
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # Repassa o header Authorization (necessário para Bearer token / Sanctum)
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Força HTTPS (o cPanel/AutoSSL já emite o certificado). Comente se ainda
+    # não tiver SSL ativo no subdomínio.
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Remove barra final redundante (exceto em diretórios)
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # ARQUIVOS REAIS (assets do React em /assets, imagens, etc.) são servidos
+    # direto pelo Apache. O resto vai para o index.php do Laravel, que devolve
+    # a API (/api/*) ou a SPA (rota fallback) — é isso que faz o roteamento do
+    # React funcionar mesmo em deep link / F5.
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# ----- Segurança extra dentro de /public -----
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# ----- Cache dos assets versionados do Vite (hash no nome = cache longo) -----
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType image/png "access plus 6 months"
+    ExpiresByType image/jpeg "access plus 6 months"
+    ExpiresByType image/svg+xml "access plus 6 months"
+    ExpiresByType image/webp "access plus 6 months"
+</IfModule>

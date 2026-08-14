@@ -1,0 +1,39 @@
+/.phpunit.cache
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/auth.json
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+
+# --- Backups de .env (contêm credenciais) ---
+.env.local.sqlite.bak
+.env.mysql.bak
+
+# --- Arquivos de trabalho / deliverables locais ---
+/deposito_setup.sql
+/deposito_dados_reais.sql
+/storage/teste_import.csv
+/storage/ids.txt
+/storage/nota_teste.png
+/storage/serve.log
+
+# --- Frontend build/deps ---
+/frontend/node_modules
+/frontend/dist

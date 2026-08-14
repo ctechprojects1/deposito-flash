@@ -1,0 +1,32 @@
+# =============================================================================
+#  .htaccess da RAIZ do projeto (document root do subdomínio)
+# -----------------------------------------------------------------------------
+#  Use este arquivo quando o document root do subdomínio apontar para a PASTA
+#  RAIZ do Laravel (e não diretamente para /public). Ele encaminha todas as
+#  requisições para dentro de /public e bloqueia o acesso aos arquivos sensíveis.
+#
+#  >> Se você CONSEGUIU apontar o document root direto para /public no cPanel,
+#     este arquivo é desnecessário — basta o public/.htaccess.
+# =============================================================================
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Não reescreve o que já está indo para /public
+    RewriteCond %{REQUEST_URI} !^/public/
+    # Encaminha toda requisição para dentro de /public
+    RewriteRule ^(.*)$ public/$1 [L,QSA]
+</IfModule>
+
+# ----- Segurança: bloqueia acesso direto a arquivos/pastas da raiz -----------
+
+# Nunca listar diretórios
+Options -Indexes
+
+# Bloqueia arquivos sensíveis (env, composer, artisan, logs, etc.)
+<FilesMatch "(^\.env|^\.env\..*|composer\.(json|lock)|package(-lock)?\.json|artisan|\.gitignore|\.htaccess)$">
+    Require all denied
+</FilesMatch>
+
+# Bloqueia acesso às pastas internas do Laravel via URL
+RedirectMatch 403 ^/(app|bootstrap|config|database|resources|routes|storage|tests|vendor)/.*$
