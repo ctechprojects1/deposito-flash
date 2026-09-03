@@ -4,11 +4,11 @@ import LocationModal from "./LocationModal";
 
 const LIMITE_BAIXO = 10;
 
-/** Classes de cor da célula conforme a quantidade. */
+/** Classes de cor da célula (gradiente) conforme a quantidade. */
 function corDaCelula(quantidade) {
-  if (quantidade <= 0) return "bg-red-500 hover:bg-red-600 text-white";
-  if (quantidade < LIMITE_BAIXO) return "bg-yellow-400 hover:bg-yellow-500 text-gray-900";
-  return "bg-green-500 hover:bg-green-600 text-white";
+  if (quantidade <= 0) return "bg-gradient-to-br from-rose-400 to-red-500 text-white";
+  if (quantidade < LIMITE_BAIXO) return "bg-gradient-to-br from-amber-300 to-amber-400 text-amber-900";
+  return "bg-gradient-to-br from-emerald-400 to-green-500 text-white";
 }
 
 /** Extrai nível (número) e lado (A/B) da posição "1A", "2B"... */
@@ -40,7 +40,6 @@ export default function StockMap() {
     carregar();
   }, []);
 
-  // Colunas = todas as posições distintas, ordenadas por nível e lado.
   const posicoes = useMemo(() => {
     const set = new Set();
     locations.forEach((l) => l.esteira && set.add(l.esteira));
@@ -50,7 +49,6 @@ export default function StockMap() {
     });
   }, [locations]);
 
-  // Linhas = Times (corredor), cada um com um mapa posição -> endereço.
   const times = useMemo(() => {
     const grupos = new Map();
     for (const loc of locations) {
@@ -64,67 +62,70 @@ export default function StockMap() {
     return Array.from(grupos.values()).sort((a, b) => a.ordem - b.ordem || a.time.localeCompare(b.time));
   }, [locations]);
 
-  if (loading) return <div className="flex h-64 items-center justify-center text-gray-500">Carregando mapa...</div>;
+  if (loading)
+    return <div className="flex h-64 items-center justify-center text-slate-400">Carregando mapa...</div>;
   if (erro)
     return (
-      <div className="flex h-64 flex-col items-center justify-center gap-3">
-        <p className="text-red-600">{erro}</p>
-        <button onClick={carregar} className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">Tentar novamente</button>
+      <div className="mx-auto mt-10 flex max-w-md flex-col items-center gap-3 card-nuvem p-8 text-center">
+        <p className="text-rose-600">{erro}</p>
+        <button onClick={carregar} className="btn-nuvem">Tentar novamente</button>
       </div>
     );
 
   return (
-    <div className="mx-auto max-w-full p-4">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-4">
+    <div className="mx-auto max-w-6xl px-4">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Mapa do Armazém</h1>
-          <p className="text-sm text-gray-500">{times.length} times · {locations.length} endereços</p>
+          <h2 className="text-xl font-extrabold text-slate-800">Mapa do Armazém</h2>
+          <p className="text-sm text-slate-400">{times.length} times · {locations.length} endereços</p>
         </div>
         <Legenda />
-      </header>
+      </div>
 
-      {/* Tabela: Times nas linhas, posições nas colunas. Rola na horizontal se precisar. */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="sticky left-0 z-10 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700">
-                Time
-              </th>
-              {posicoes.map((p) => (
-                <th key={p} className="min-w-[56px] px-2 py-2 text-center font-semibold text-gray-600">
-                  {p}
+      <div className="card-nuvem overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-slate-50/80 text-slate-500 backdrop-blur">
+                <th className="sticky left-0 z-20 bg-slate-50/95 px-4 py-3 text-left font-semibold backdrop-blur">
+                  Time
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {times.map((t) => (
-              <tr key={t.time} className="border-t border-gray-100">
-                <th className="sticky left-0 z-10 whitespace-nowrap bg-white px-3 py-1.5 text-left font-semibold text-gray-800">
-                  {t.time}
-                  <span className="ml-2 text-xs font-normal text-gray-400">{t.total} un.</span>
-                </th>
-                {posicoes.map((p) => {
-                  const loc = t.porPos[p];
-                  if (!loc) return <td key={p} className="border-l border-gray-100 bg-gray-50/50" />;
-                  const q = Number(loc.total_quantidade || 0);
-                  return (
-                    <td key={p} className="border-l border-gray-100 p-0.5">
-                      <button
-                        onClick={() => setSelecionado(loc)}
-                        title={`${loc.nome} — ${q} un.`}
-                        className={`h-9 w-full rounded font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-400 ${corDaCelula(q)}`}
-                      >
-                        {q}
-                      </button>
-                    </td>
-                  );
-                })}
+                {posicoes.map((p) => (
+                  <th key={p} className="min-w-[58px] px-2 py-3 text-center text-xs font-bold uppercase tracking-wide">
+                    {p}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {times.map((t) => (
+                <tr key={t.time} className="group border-t border-slate-100 transition hover:bg-indigo-50/40">
+                  <th className="sticky left-0 z-10 whitespace-nowrap bg-white/95 px-4 py-2 text-left backdrop-blur group-hover:bg-indigo-50/60">
+                    <span className="font-bold text-slate-800">{t.time}</span>
+                    <span className="ml-2 text-xs font-medium text-slate-400">{t.total} un.</span>
+                  </th>
+                  {posicoes.map((p) => {
+                    const loc = t.porPos[p];
+                    if (!loc)
+                      return <td key={p} className="px-1 py-1"><div className="h-9 rounded-lg border border-dashed border-slate-100" /></td>;
+                    const q = Number(loc.total_quantidade || 0);
+                    return (
+                      <td key={p} className="px-1 py-1">
+                        <button
+                          onClick={() => setSelecionado(loc)}
+                          title={`${loc.nome} — ${q} un.`}
+                          className={`h-9 w-full rounded-lg text-sm font-bold shadow-sm transition hover:scale-[1.04] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-300 ${corDaCelula(q)}`}
+                        >
+                          {q}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {selecionado && <LocationModal location={selecionado} onClose={() => setSelecionado(null)} />}
@@ -134,15 +135,15 @@ export default function StockMap() {
 
 function Legenda() {
   const itens = [
-    { cor: "bg-red-500", texto: "Vazio (0)" },
-    { cor: "bg-yellow-400", texto: `Baixo (< ${LIMITE_BAIXO})` },
-    { cor: "bg-green-500", texto: `Ok (≥ ${LIMITE_BAIXO})` },
+    { cor: "from-rose-400 to-red-500", texto: "Vazio (0)" },
+    { cor: "from-amber-300 to-amber-400", texto: `Baixo (< ${LIMITE_BAIXO})` },
+    { cor: "from-emerald-400 to-green-500", texto: `Ok (≥ ${LIMITE_BAIXO})` },
   ];
   return (
-    <div className="flex items-center gap-4 text-sm text-gray-600">
+    <div className="flex flex-wrap items-center gap-2">
       {itens.map((i) => (
-        <span key={i.texto} className="flex items-center gap-1.5">
-          <span className={`inline-block h-3 w-3 rounded ${i.cor}`} />
+        <span key={i.texto} className="chip">
+          <span className={`inline-block h-3 w-3 rounded-full bg-gradient-to-br ${i.cor}`} />
           {i.texto}
         </span>
       ))}
