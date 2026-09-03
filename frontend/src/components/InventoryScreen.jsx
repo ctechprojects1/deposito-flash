@@ -105,45 +105,41 @@ function ListaContagens({ contagens, onAbrir, onCriou }) {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-gray-800">Contagem / Inventário</h1>
+      <h1 className="mb-6 text-2xl font-extrabold text-slate-800">Contagem / Inventário</h1>
 
       {erro && (
-        <div className="mb-4 rounded-lg bg-red-100 p-3 text-sm text-red-800">{erro}</div>
+        <div className="mb-4 rounded-xl bg-rose-100 p-3 text-sm text-rose-800">{erro}</div>
       )}
 
       {!temAberta && (
-        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 font-semibold text-gray-700">Iniciar nova contagem</h2>
+        <div className="card-nuvem mb-6 p-5">
+          <h2 className="mb-3 font-bold text-slate-700">Iniciar nova contagem</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
               placeholder="Descrição (ex: Balanço Agosto)"
-              className="rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="input-nuvem"
             />
             <input
               value={escopo}
               onChange={(e) => setEscopo(e.target.value)}
               placeholder="Time específico (opcional — vazio = geral)"
-              className="rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="input-nuvem"
             />
           </div>
-          <button
-            onClick={iniciar}
-            disabled={criando}
-            className="mt-3 rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
-          >
+          <button onClick={iniciar} disabled={criando} className="btn-nuvem mt-3">
             {criando ? "Iniciando..." : "Iniciar Contagem"}
           </button>
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-slate-500">
             Ao iniciar, o sistema congela o estoque atual como base para comparação.
           </p>
         </div>
       )}
 
-      <h2 className="mb-3 font-semibold text-gray-700">Contagens</h2>
+      <h2 className="mb-3 font-bold text-slate-700">Contagens</h2>
       {contagens.length === 0 && (
-        <p className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400">
           Nenhuma contagem ainda.
         </p>
       )}
@@ -152,7 +148,7 @@ function ListaContagens({ contagens, onAbrir, onCriou }) {
           <button
             key={c.id}
             onClick={() => onAbrir(c.id)}
-            className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-white p-4 text-left hover:bg-gray-50"
+            className="card-nuvem flex w-full items-center justify-between p-4 text-left transition hover:-translate-y-0.5"
           >
             <div>
               <span className="font-semibold text-gray-800">
@@ -196,32 +192,29 @@ function DetalheContagem({ contagem, onVoltar, onMudou }) {
 
   return (
     <div>
-      <button onClick={onVoltar} className="mb-3 text-sm text-blue-600 hover:underline">
+      <button onClick={onVoltar} className="mb-3 text-sm font-medium text-indigo-600 hover:underline">
         ← Voltar
       </button>
 
-      <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="card-nuvem mb-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-gray-800">
+            <h1 className="text-xl font-extrabold text-slate-800">
               #{contagem.id} {contagem.descricao || "Contagem"}
             </h1>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-slate-500">
               {contagem.escopo_time ? `Time: ${contagem.escopo_time}` : "Geral"} ·{" "}
               {contagem.itens_contados}/{contagem.total_itens} itens ({pct}%)
             </p>
           </div>
           <StatusBadge status={contagem.status} />
         </div>
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-100">
-          <div className="h-full bg-blue-500" style={{ width: `${pct}%` }} />
+        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="h-full bg-gradient-to-r from-sky-500 to-indigo-500" style={{ width: `${pct}%` }} />
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            onClick={() => setMostrarDiverg(true)}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50"
-          >
+          <button onClick={() => setMostrarDiverg(true)} className="btn-ghost">
             Ver divergências
           </button>
           {aberta && (
@@ -233,28 +226,28 @@ function DetalheContagem({ contagem, onVoltar, onMudou }) {
       {aberta ? (
         <div className="grid gap-4 md:grid-cols-[280px_1fr]">
           {/* Lista de endereços */}
-          <div className="rounded-xl border border-gray-200 bg-white p-3">
+          <div className="card-nuvem p-3">
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar endereço..."
-              className="mb-2 w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none"
+              className="input-nuvem mb-2"
             />
             <div className="max-h-[60vh] space-y-1 overflow-y-auto">
               {filtrados.map((e) => (
                 <button
                   key={e.location_id}
                   onClick={() => setEnderecoSel(e.location_id)}
-                  className={`flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm ${
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
                     enderecoSel === e.location_id
-                      ? "bg-blue-100 text-blue-800"
-                      : "hover:bg-gray-50"
+                      ? "bg-indigo-100 font-semibold text-indigo-800"
+                      : "hover:bg-slate-50"
                   }`}
                 >
                   <span>{e.endereco}</span>
                   <span
                     className={`text-xs ${
-                      e.contados === e.total ? "text-green-600" : "text-gray-400"
+                      e.contados === e.total ? "text-emerald-600" : "text-slate-400"
                     }`}
                   >
                     {e.contados}/{e.total}
@@ -274,7 +267,7 @@ function DetalheContagem({ contagem, onVoltar, onMudou }) {
                 onSalvou={onMudou}
               />
             ) : (
-              <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 text-gray-400">
+              <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-slate-200 text-slate-400">
                 Selecione um endereço para contar
               </div>
             )}
@@ -321,8 +314,8 @@ function PainelEndereco({ endereco, contagemId, onSalvou }) {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <h3 className="mb-3 font-bold text-gray-800">{endereco.endereco}</h3>
+    <div className="card-nuvem p-4">
+      <h3 className="mb-3 font-extrabold text-slate-800">{endereco.endereco}</h3>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-gray-500">
@@ -348,7 +341,7 @@ function PainelEndereco({ endereco, contagemId, onSalvou }) {
                   onChange={(e) =>
                     setValores((v) => ({ ...v, [i.item_id]: e.target.value }))
                   }
-                  className="w-24 rounded border border-gray-300 px-2 py-1 text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right shadow-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-200"
                 />
               </td>
             </tr>
@@ -356,14 +349,10 @@ function PainelEndereco({ endereco, contagemId, onSalvou }) {
         </tbody>
       </table>
       <div className="mt-4 flex items-center gap-3">
-        <button
-          onClick={salvar}
-          disabled={salvando}
-          className="rounded-lg bg-green-600 px-5 py-2 font-semibold text-white hover:bg-green-700 disabled:bg-gray-300"
-        >
+        <button onClick={salvar} disabled={salvando} className="btn-ok">
           {salvando ? "Salvando..." : "Salvar endereço"}
         </button>
-        {ok && <span className="text-sm text-green-600">✓ Salvo</span>}
+        {ok && <span className="text-sm font-semibold text-emerald-600">✓ Salvo</span>}
       </div>
     </div>
   );
@@ -404,17 +393,13 @@ function FinalizarBotao({ contagem, onMudou, onVoltar }) {
 
   return (
     <>
-      <button
-        onClick={finalizar}
-        disabled={busy}
-        className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:bg-gray-300"
-      >
+      <button onClick={finalizar} disabled={busy} className="btn-ok">
         Finalizar e ajustar estoque
       </button>
       <button
         onClick={cancelar}
         disabled={busy}
-        className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+        className="inline-flex items-center rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
       >
         Cancelar
       </button>
@@ -432,11 +417,11 @@ function DivergenciasModal({ contagemId, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl"
+        className="card-nuvem max-h-[80vh] w-full max-w-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b p-4">
-          <h2 className="text-lg font-bold text-gray-800">Divergências</h2>
+        <div className="flex items-center justify-between border-b border-slate-100 p-4">
+          <h2 className="text-lg font-extrabold text-slate-800">Divergências</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700">✕</button>
         </div>
         <div className="max-h-[65vh] overflow-y-auto p-4">
@@ -491,12 +476,12 @@ function DivergenciasModal({ contagemId, onClose }) {
 
 function StatusBadge({ status }) {
   const cores = {
-    aberta: "bg-yellow-100 text-yellow-800",
-    finalizada: "bg-green-100 text-green-800",
-    cancelada: "bg-gray-200 text-gray-600",
+    aberta: "bg-amber-100 text-amber-800",
+    finalizada: "bg-emerald-100 text-emerald-800",
+    cancelada: "bg-slate-200 text-slate-600",
   };
   return (
-    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${cores[status] || ""}`}>
+    <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${cores[status] || ""}`}>
       {status}
     </span>
   );

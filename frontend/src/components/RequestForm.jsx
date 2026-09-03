@@ -127,7 +127,7 @@ export default function RequestForm() {
 
   return (
     <div className="mx-auto max-w-3xl p-4">
-      <h1 className="mb-6 text-2xl font-bold text-gray-800">
+      <h1 className="mb-6 text-2xl font-extrabold text-slate-800">
         Nova Solicitação de Retirada
       </h1>
 
@@ -143,7 +143,7 @@ export default function RequestForm() {
         </div>
       )}
 
-      <form onSubmit={enviar} className="space-y-6">
+      <form onSubmit={enviar} className="card-nuvem space-y-6 p-5">
         {/* Itens */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -178,7 +178,7 @@ export default function RequestForm() {
             value={destino}
             onChange={(e) => setDestino(e.target.value)}
             placeholder="Ex.: Loja Centro, Evento X..."
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="input-nuvem"
           />
         </div>
 
@@ -191,7 +191,7 @@ export default function RequestForm() {
             value={observacao}
             onChange={(e) => setObservacao(e.target.value)}
             rows={2}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="input-nuvem"
           />
         </div>
 
@@ -213,11 +213,7 @@ export default function RequestForm() {
           )}
         </div>
 
-        <button
-          type="submit"
-          disabled={enviando || !formValido()}
-          className="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-        >
+        <button type="submit" disabled={enviando || !formValido()} className="btn-nuvem w-full py-3">
           {enviando ? "Enviando..." : "Registrar Solicitação"}
         </button>
       </form>
@@ -238,7 +234,7 @@ function ItemLinha({ item, podeRemover, onCodigo, onValidar, onQuantidade, onRem
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
       <div className="grid grid-cols-12 gap-3">
         {/* Código */}
         <div className="col-span-4">

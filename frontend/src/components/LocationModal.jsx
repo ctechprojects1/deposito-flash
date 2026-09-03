@@ -48,15 +48,15 @@ export default function LocationModal({ location, onClose }) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-xl bg-white shadow-2xl"
+        className="card-nuvem w-full max-w-lg overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Cabeçalho */}
-        <div className="flex items-start justify-between border-b p-5">
+        <div className="flex items-start justify-between border-b border-slate-100 bg-gradient-to-r from-sky-50 to-indigo-50 p-5">
           <div>
-            <h2 className="text-xl font-bold text-gray-800">{detalhe.nome}</h2>
-            <p className="text-sm text-gray-500">
-              Corredor {detalhe.corredor || "—"} · Esteira{" "}
+            <h2 className="text-xl font-extrabold text-slate-800">{detalhe.nome}</h2>
+            <p className="text-sm text-slate-500">
+              Time {detalhe.corredor || "—"} · Posição{" "}
               {detalhe.esteira || "—"}
             </p>
           </div>
@@ -112,14 +112,9 @@ export default function LocationModal({ location, onClose }) {
         </div>
 
         {/* Rodapé */}
-        <div className="flex items-center justify-between border-t bg-gray-50 px-5 py-3 text-sm text-gray-600">
+        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-5 py-3 text-sm text-slate-500">
           <span>{produtos.length} produto(s)</span>
-          <button
-            onClick={onClose}
-            className="rounded bg-gray-800 px-4 py-2 text-white hover:bg-gray-900"
-          >
-            Fechar
-          </button>
+          <button onClick={onClose} className="btn-nuvem px-4 py-2">Fechar</button>
         </div>
       </div>
     </div>

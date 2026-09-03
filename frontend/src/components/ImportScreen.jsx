@@ -31,7 +31,7 @@ export default function ImportScreen() {
 
   return (
     <div className="mx-auto max-w-2xl p-4">
-      <h1 className="mb-2 text-2xl font-bold text-gray-800">
+      <h1 className="mb-2 text-2xl font-extrabold text-slate-800">
         Importar Estoque (CSV)
       </h1>
       <p className="mb-6 text-sm text-gray-500">
@@ -49,7 +49,7 @@ export default function ImportScreen() {
         </div>
       )}
 
-      <form onSubmit={enviar} className="space-y-5 rounded-xl border border-gray-200 bg-white p-5">
+      <form onSubmit={enviar} className="card-nuvem space-y-5 p-5">
         <div>
           <label className="mb-1 block font-semibold text-gray-700">
             Arquivo CSV
@@ -80,11 +80,7 @@ export default function ImportScreen() {
           Somar às quantidades já existentes (em vez de sobrescrever)
         </label>
 
-        <button
-          type="submit"
-          disabled={enviando || !arquivo}
-          className="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-        >
+        <button type="submit" disabled={enviando || !arquivo} className="btn-nuvem w-full py-3">
           {enviando ? "Importando..." : "Importar"}
         </button>
       </form>
@@ -123,9 +119,9 @@ export default function ImportScreen() {
 
 function Contador({ rotulo, valor, cor }) {
   return (
-    <div className="rounded-lg bg-white p-3 text-center shadow-sm">
-      <div className={`text-2xl font-bold ${cor}`}>{valor}</div>
-      <div className="text-xs text-gray-500">{rotulo}</div>
+    <div className="card-nuvem p-3 text-center">
+      <div className={`text-2xl font-extrabold ${cor}`}>{valor}</div>
+      <div className="text-xs text-slate-500">{rotulo}</div>
     </div>
   );
 }

@@ -74,13 +74,8 @@ export default function PickerDashboard() {
   return (
     <div className="mx-auto max-w-6xl p-4">
       <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-800">Painel do Separador</h1>
-        <button
-          onClick={carregar}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
-        >
-          Atualizar
-        </button>
+        <h1 className="text-2xl font-extrabold text-slate-800">Painel do Separador</h1>
+        <button onClick={carregar} className="btn-ghost">Atualizar</button>
       </header>
 
       {erro && (
@@ -95,11 +90,7 @@ export default function PickerDashboard() {
           {pendentes.length === 0 && <Vazio texto="Nenhuma solicitação pendente." />}
           {pendentes.map((s) => (
             <Card key={s.id} solicitacao={s}>
-              <button
-                onClick={() => iniciar(s.id)}
-                disabled={acao === s.id}
-                className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
-              >
+              <button onClick={() => iniciar(s.id)} disabled={acao === s.id} className="btn-nuvem w-full">
                 {acao === s.id ? "Iniciando..." : "Iniciar Separação"}
               </button>
             </Card>
@@ -110,11 +101,7 @@ export default function PickerDashboard() {
           {emSeparacao.length === 0 && <Vazio texto="Nada em separação." />}
           {emSeparacao.map((s) => (
             <Card key={s.id} solicitacao={s} mostrarLocais>
-              <button
-                onClick={() => confirmar(s.id)}
-                disabled={acao === s.id}
-                className="w-full rounded-lg bg-green-600 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:bg-gray-300"
-              >
+              <button onClick={() => confirmar(s.id)} disabled={acao === s.id} className="btn-ok w-full">
                 {acao === s.id ? "Confirmando..." : "Confirmar Retirada"}
               </button>
             </Card>
@@ -127,13 +114,11 @@ export default function PickerDashboard() {
 
 function Coluna({ titulo, cor, total, children }) {
   return (
-    <div className="rounded-xl bg-gray-100 p-4">
+    <div className="rounded-2xl bg-slate-100/70 p-4">
       <div className="mb-4 flex items-center gap-2">
         <span className={`h-3 w-3 rounded-full ${cor}`} />
-        <h2 className="font-bold text-gray-700">{titulo}</h2>
-        <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-gray-600">
-          {total}
-        </span>
+        <h2 className="font-bold text-slate-700">{titulo}</h2>
+        <span className="chip ml-auto">{total}</span>
       </div>
       <div className="space-y-3">{children}</div>
     </div>
@@ -154,9 +139,9 @@ function Vazio({ texto }) {
  */
 function Card({ solicitacao, mostrarLocais = false, children }) {
   return (
-    <div className="rounded-lg bg-white p-4 shadow-sm">
+    <div className="card-nuvem p-4">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-400">
+        <span className="text-xs font-semibold text-slate-400">
           #{solicitacao.id}
         </span>
         <span className="text-xs text-gray-500">{solicitacao.criada_em}</span>
