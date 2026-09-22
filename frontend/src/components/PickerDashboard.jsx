@@ -4,11 +4,10 @@ import {
   iniciarSeparacao,
   confirmarRetirada,
 } from "../services/api";
-
-// Em produção, viria do usuário autenticado (separador logado).
-const SEPARADOR_ID = 2;
+import { useAuth } from "../AuthContext";
 
 export default function PickerDashboard() {
+  const { user } = useAuth();
   const [pendentes, setPendentes] = useState([]);
   const [emSeparacao, setEmSeparacao] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +40,7 @@ export default function PickerDashboard() {
     setAcao(id);
     setErro(null);
     try {
-      await iniciarSeparacao(id, SEPARADOR_ID);
+      await iniciarSeparacao(id, user.id);
       await carregar();
     } catch (err) {
       setErro(err?.response?.data?.message || "Erro ao iniciar separação.");

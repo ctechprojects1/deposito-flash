@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchLocations } from "../services/api";
+import { useAuth } from "../AuthContext";
 import LocationModal from "./LocationModal";
 import AddressManager from "./AddressManager";
 
@@ -19,6 +20,8 @@ function parsePosicao(esteira) {
 }
 
 export default function StockMap() {
+  const { hasPerm } = useAuth();
+  const podeGerenciar = hasPerm("gerenciar_enderecos");
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -83,9 +86,11 @@ export default function StockMap() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Legenda />
-          <button onClick={() => setGerenciar(true)} className="btn-nuvem">
-            ➕ Endereços
-          </button>
+          {podeGerenciar && (
+            <button onClick={() => setGerenciar(true)} className="btn-nuvem">
+              ➕ Endereços
+            </button>
+          )}
         </div>
       </div>
 
@@ -140,6 +145,7 @@ export default function StockMap() {
           location={selecionado}
           onClose={() => setSelecionado(null)}
           onChanged={carregar}
+          podeGerenciar={podeGerenciar}
         />
       )}
 

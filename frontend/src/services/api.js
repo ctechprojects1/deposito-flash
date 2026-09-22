@@ -9,6 +9,73 @@ const api = axios.create({
   },
 });
 
+// Anexa o token de autenticação (se houver) em toda requisição.
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// Se o token expirar/for inválido (401), limpa e volta pro login.
+api.interceptors.response.use(
+  (r) => r,
+  (error) => {
+    if (error?.response?.status === 401) {
+      localStorage.removeItem("token");
+      // avisa o app pra voltar ao login
+      window.dispatchEvent(new Event("auth:logout"));
+    }
+    return Promise.reject(error);
+  }
+);
+
+/* ===================== Autenticação ===================== */
+
+export async function apiLogin(email, password) {
+  const { data } = await api.post("/login", { email, password });
+  return data; // { token, user }
+}
+
+export async function apiMe() {
+  const { data } = await api.get("/me");
+  return data.user;
+}
+
+export async function apiLogout() {
+  try {
+    await api.post("/logout");
+  } catch (_) {
+    /* ignora */
+  }
+}
+
+/* ===================== Usuários (admin) ===================== */
+
+export async function fetchPermissoes() {
+  const { data } = await api.get("/permissoes");
+  return data.data ?? [];
+}
+
+export async function fetchUsuarios() {
+  const { data } = await api.get("/users");
+  return data.data ?? [];
+}
+
+export async function criarUsuario(payload) {
+  const { data } = await api.post("/users", payload);
+  return data;
+}
+
+export async function atualizarUsuario(id, payload) {
+  const { data } = await api.put(`/users/${id}`, payload);
+  return data;
+}
+
+export async function excluirUsuario(id) {
+  const { data } = await api.delete(`/users/${id}`);
+  return data;
+}
+
 /**
  * Busca todos os locais com seus produtos/quantidades (alimenta o mapa).
  */

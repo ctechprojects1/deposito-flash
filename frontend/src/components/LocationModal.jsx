@@ -8,7 +8,7 @@ import { fetchLocation, zerarEndereco } from "../services/api";
  * mas revalida no backend para garantir dados atualizados ao abrir.
  * `onChanged` é chamado quando algo muda (ex: zerar estoque) para o mapa recarregar.
  */
-export default function LocationModal({ location, onClose, onChanged }) {
+export default function LocationModal({ location, onClose, onChanged, podeGerenciar = true }) {
   const [detalhe, setDetalhe] = useState(location);
   const [loading, setLoading] = useState(false);
   const [zerando, setZerando] = useState(false);
@@ -133,13 +133,15 @@ export default function LocationModal({ location, onClose, onChanged }) {
         <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/70 px-5 py-3 text-sm text-slate-500">
           <span>{produtos.length} produto(s)</span>
           <div className="flex items-center gap-2">
-            <button
-              onClick={zerar}
-              disabled={zerando || produtos.length === 0}
-              className="inline-flex items-center rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {zerando ? "Zerando..." : "Zerar estoque"}
-            </button>
+            {podeGerenciar && (
+              <button
+                onClick={zerar}
+                disabled={zerando || produtos.length === 0}
+                className="inline-flex items-center rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {zerando ? "Zerando..." : "Zerar estoque"}
+              </button>
+            )}
             <button onClick={onClose} className="btn-nuvem px-4 py-2">Fechar</button>
           </div>
         </div>

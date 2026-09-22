@@ -17,17 +17,31 @@ class User extends Authenticatable
     public const ROLE_SOLICITANTE = 'solicitante';
     public const ROLE_SEPARADOR   = 'separador';
 
+    /** Todas as permissões concedíveis (funcionalidades do sistema). */
+    public const PERMISSOES = [
+        'ver_mapa',
+        'movimentar',
+        'solicitar',
+        'separar',
+        'contar',
+        'importar',
+        'gerenciar_enderecos',
+        'admin',
+    ];
+
     protected $fillable = [
         'name',
         'email',
         'password',
         'role',
+        'permissions',
         'ativo',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
+        'api_token',
     ];
 
     protected function casts(): array
@@ -36,7 +50,26 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password'          => 'hashed',
             'ativo'             => 'boolean',
+            'permissions'       => 'array',
         ];
+    }
+
+    /**
+     * O usuário tem a permissão? Admin (role admin ou permissão 'admin')
+     * tem acesso a tudo.
+     */
+    public function can2(string $permissao): bool
+    {
+        if ($this->isAdmin()) {
+            return true;
+        }
+        return in_array($permissao, $this->permissions ?? [], true);
+    }
+
+    /** Lista efetiva de permissões (admin recebe todas). */
+    public function permissoesEfetivas(): array
+    {
+        return $this->isAdmin() ? self::PERMISSOES : ($this->permissions ?? []);
     }
 
     /*
@@ -69,7 +102,8 @@ class User extends Authenticatable
 
     public function isAdmin(): bool
     {
-        return $this->role === self::ROLE_ADMIN;
+        return $this->role === self::ROLE_ADMIN
+            || in_array('admin', $this->permissions ?? [], true);
     }
 
     public function isSolicitante(): bool

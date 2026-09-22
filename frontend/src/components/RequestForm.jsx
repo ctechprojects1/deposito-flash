@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { validarProduto, criarSolicitacao } from "../services/api";
-
-// Em produção, viria do usuário autenticado (contexto de auth).
-const SOLICITANTE_ID = 1;
+import { useAuth } from "../AuthContext";
 
 function linhaVazia() {
   return {
@@ -16,6 +14,7 @@ function linhaVazia() {
 }
 
 export default function RequestForm() {
+  const { user } = useAuth();
   const [itens, setItens] = useState([linhaVazia()]);
   const [destino, setDestino] = useState("");
   const [observacao, setObservacao] = useState("");
@@ -99,7 +98,7 @@ export default function RequestForm() {
     setEnviando(true);
     try {
       await criarSolicitacao({
-        solicitante_id: SOLICITANTE_ID,
+        solicitante_id: user.id,
         destino: destino.trim(),
         observacao: observacao.trim(),
         itens: itens.map((it) => ({
