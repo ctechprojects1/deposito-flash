@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Location;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class LocationController extends Controller
 {
@@ -72,6 +74,83 @@ class LocationController extends Controller
                     'quantidade'      => (float) $stock->quantidade,
                 ])->values(),
             ],
+        ]);
+    }
+
+    /**
+     * Cria endereços para um Time (com uma ou mais posições).
+     *
+     * POST /api/locations
+     *   { time: "SANTOS", posicoes: ["1A","1B","2A"] }
+     *
+     * Serve tanto para criar um Time novo quanto para adicionar posições
+     * (linhas) a um Time já existente. Posições que já existem são ignoradas.
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $dados = $request->validate([
+            'time'       => ['required', 'string', 'max:120'],
+            'posicoes'   => ['required', 'array', 'min:1'],
+            'posicoes.*' => ['required', 'string', 'max:20'],
+        ]);
+
+        $time = trim($dados['time']);
+
+        // Base do eixo X: reaproveita a do Time se já existir; senão vai pro fim.
+        $baseExistente = Location::where('corredor', $time)->min('eixo_x');
+        $base = $baseExistente ?? ((int) Location::max('eixo_x') + 2);
+
+        $criados = [];
+        $ignorados = [];
+
+        DB::transaction(function () use ($dados, $time, $base, &$criados, &$ignorados) {
+            foreach ($dados['posicoes'] as $posBruta) {
+                $pos = strtoupper(trim($posBruta));
+                if ($pos === '') {
+                    continue;
+                }
+
+                $nome = "{$time} {$pos}";
+                if (Location::where('nome', $nome)->exists()) {
+                    $ignorados[] = $nome;
+                    continue;
+                }
+
+                $lado  = preg_match('/[AB]$/', $pos) ? substr($pos, -1) : 'A';
+                $nivel = (int) preg_replace('/\D/', '', $pos);
+
+                $loc = Location::create([
+                    'nome'     => $nome,
+                    'corredor' => $time,
+                    'esteira'  => $pos,
+                    'eixo_x'   => $base + ($lado === 'B' ? 1 : 0),
+                    'eixo_y'   => $nivel,
+                    'ativo'    => true,
+                ]);
+
+                $criados[] = ['id' => $loc->id, 'nome' => $loc->nome];
+            }
+        });
+
+        return response()->json([
+            'message'   => count($criados) . ' endereço(s) criado(s).'
+                         . (count($ignorados) ? ' ' . count($ignorados) . ' já existia(m).' : ''),
+            'criados'   => $criados,
+            'ignorados' => $ignorados,
+        ], 201);
+    }
+
+    /**
+     * Zera o estoque de um endereço (todas as quantidades viram 0).
+     *
+     * POST /api/locations/{location}/zerar
+     */
+    public function zerar(Location $location): JsonResponse
+    {
+        $afetados = $location->stocks()->where('quantidade', '!=', 0)->update(['quantidade' => 0]);
+
+        return response()->json([
+            'message' => "Estoque de {$location->nome} zerado ({$afetados} produto(s)).",
         ]);
     }
 }

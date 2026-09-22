@@ -26,6 +26,22 @@ export async function fetchLocation(id) {
 }
 
 /**
+ * Cria endereços para um Time (uma ou mais posições).
+ * @param {string} time
+ * @param {string[]} posicoes  ex: ["1A","1B","2A"]
+ */
+export async function criarEnderecos(time, posicoes) {
+  const { data } = await api.post("/locations", { time, posicoes });
+  return data;
+}
+
+/** Zera o estoque de um endereço. */
+export async function zerarEndereco(id) {
+  const { data } = await api.post(`/locations/${id}/zerar`);
+  return data;
+}
+
+/**
  * Valida um código no Microvix e traz o nome + product_id local.
  */
 export async function validarProduto(codigo) {

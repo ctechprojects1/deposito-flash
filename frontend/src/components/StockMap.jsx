@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchLocations } from "../services/api";
 import LocationModal from "./LocationModal";
+import AddressManager from "./AddressManager";
 
 const LIMITE_BAIXO = 10;
 
@@ -22,6 +23,7 @@ export default function StockMap() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
   const [selecionado, setSelecionado] = useState(null);
+  const [gerenciar, setGerenciar] = useState(false);
 
   async function carregar() {
     try {
@@ -79,7 +81,12 @@ export default function StockMap() {
           <h2 className="text-xl font-extrabold text-slate-800">Mapa do Armazém</h2>
           <p className="text-sm text-slate-400">{times.length} times · {locations.length} endereços</p>
         </div>
-        <Legenda />
+        <div className="flex flex-wrap items-center gap-3">
+          <Legenda />
+          <button onClick={() => setGerenciar(true)} className="btn-nuvem">
+            ➕ Endereços
+          </button>
+        </div>
       </div>
 
       <div className="card-nuvem overflow-hidden">
@@ -128,7 +135,21 @@ export default function StockMap() {
         </div>
       </div>
 
-      {selecionado && <LocationModal location={selecionado} onClose={() => setSelecionado(null)} />}
+      {selecionado && (
+        <LocationModal
+          location={selecionado}
+          onClose={() => setSelecionado(null)}
+          onChanged={carregar}
+        />
+      )}
+
+      {gerenciar && (
+        <AddressManager
+          times={times.map((t) => t.time)}
+          onClose={() => setGerenciar(false)}
+          onCreated={carregar}
+        />
+      )}
     </div>
   );
 }

@@ -21,7 +21,9 @@ use Illuminate\Support\Facades\Route;
 
 // Mapa / endereços
 Route::get('/locations', [LocationController::class, 'index']);
+Route::post('/locations', [LocationController::class, 'store']); // criar Time/posições
 Route::get('/locations/{location}', [LocationController::class, 'show']);
+Route::post('/locations/{location}/zerar', [LocationController::class, 'zerar']); // zerar estoque
 
 // Movimentação de estoque
 Route::post('/stock/entrada', [StockController::class, 'entrada']);

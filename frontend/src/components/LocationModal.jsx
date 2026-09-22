@@ -1,15 +1,33 @@
 import { useEffect, useState } from "react";
-import { fetchLocation } from "../services/api";
+import { fetchLocation, zerarEndereco } from "../services/api";
 
 /**
  * Modal que lista os produtos e quantidades guardados em um local (Time).
  *
  * Recebe o `location` já clicado no mapa (que pode trazer os produtos embutidos),
  * mas revalida no backend para garantir dados atualizados ao abrir.
+ * `onChanged` é chamado quando algo muda (ex: zerar estoque) para o mapa recarregar.
  */
-export default function LocationModal({ location, onClose }) {
+export default function LocationModal({ location, onClose, onChanged }) {
   const [detalhe, setDetalhe] = useState(location);
   const [loading, setLoading] = useState(false);
+  const [zerando, setZerando] = useState(false);
+
+  async function zerar() {
+    if (!window.confirm(`Zerar o estoque de ${detalhe.nome}? Todas as quantidades deste endereço vão para 0.`))
+      return;
+    setZerando(true);
+    try {
+      await zerarEndereco(detalhe.id);
+      const atualizado = await fetchLocation(detalhe.id);
+      if (atualizado) setDetalhe(atualizado);
+      onChanged?.();
+    } catch (e) {
+      alert(e?.response?.data?.message || "Erro ao zerar o estoque.");
+    } finally {
+      setZerando(false);
+    }
+  }
 
   useEffect(() => {
     let ativo = true;
@@ -112,9 +130,18 @@ export default function LocationModal({ location, onClose }) {
         </div>
 
         {/* Rodapé */}
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-5 py-3 text-sm text-slate-500">
+        <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/70 px-5 py-3 text-sm text-slate-500">
           <span>{produtos.length} produto(s)</span>
-          <button onClick={onClose} className="btn-nuvem px-4 py-2">Fechar</button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={zerar}
+              disabled={zerando || produtos.length === 0}
+              className="inline-flex items-center rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {zerando ? "Zerando..." : "Zerar estoque"}
+            </button>
+            <button onClick={onClose} className="btn-nuvem px-4 py-2">Fechar</button>
+          </div>
         </div>
       </div>
     </div>
