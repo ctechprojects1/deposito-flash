@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { criarEnderecos } from "../services/api";
+import { criarEnderecos, zerarEstoqueGeral } from "../services/api";
 
 // Posições comuns (níveis 1-5, lados A/B). Chips em vez de checkbox.
 const PRESETS = [];
@@ -16,6 +16,25 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState(null);
   const [erro, setErro] = useState(null);
+  const [confirmGeral, setConfirmGeral] = useState("");
+  const [zerandoGeral, setZerandoGeral] = useState(false);
+
+  async function zerarGeral() {
+    if (confirmGeral.trim().toUpperCase() !== "ZERAR") return;
+    setErro(null);
+    setMsg(null);
+    setZerandoGeral(true);
+    try {
+      const r = await zerarEstoqueGeral();
+      setMsg(r.message);
+      setConfirmGeral("");
+      onCreated?.(); // recarrega o mapa
+    } catch (e) {
+      setErro(e?.response?.data?.message || "Erro ao zerar o estoque geral.");
+    } finally {
+      setZerandoGeral(false);
+    }
+  }
 
   useEffect(() => {
     function onKey(e) {
@@ -76,7 +95,7 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
           </button>
         </div>
 
-        <div className="space-y-5 p-5">
+        <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
           {erro && <div className="rounded-xl bg-rose-100 p-3 text-sm text-rose-800">{erro}</div>}
           {msg && <div className="rounded-xl bg-emerald-100 p-3 text-sm text-emerald-800">{msg}</div>}
 
@@ -148,6 +167,31 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
               />
               <button type="button" onClick={addCustom} className="btn-ghost whitespace-nowrap">
                 Adicionar
+              </button>
+            </div>
+          </div>
+
+          {/* Zona de perigo — zerar estoque geral */}
+          <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4">
+            <h3 className="text-sm font-bold text-rose-700">⚠ Zona de perigo</h3>
+            <p className="mt-1 text-xs text-rose-600">
+              Zerar o estoque geral coloca a quantidade de <strong>todos os endereços</strong> em 0.
+              Não pode ser desfeito. Para confirmar, digite <strong>ZERAR</strong> abaixo.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <input
+                value={confirmGeral}
+                onChange={(e) => setConfirmGeral(e.target.value)}
+                placeholder="Digite ZERAR"
+                className="input-nuvem"
+              />
+              <button
+                type="button"
+                onClick={zerarGeral}
+                disabled={zerandoGeral || confirmGeral.trim().toUpperCase() !== "ZERAR"}
+                className="inline-flex items-center whitespace-nowrap rounded-full bg-gradient-to-r from-rose-500 to-red-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-500/30 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:translate-y-0"
+              >
+                {zerandoGeral ? "Zerando..." : "Zerar estoque geral"}
               </button>
             </div>
           </div>

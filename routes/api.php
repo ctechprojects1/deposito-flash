@@ -29,6 +29,7 @@ Route::post('/locations/{location}/zerar', [LocationController::class, 'zerar'])
 Route::post('/stock/entrada', [StockController::class, 'entrada']);
 Route::post('/stock/baixa', [StockController::class, 'baixa']);
 Route::post('/stock/import', [ImportController::class, 'importar']); // upload de CSV
+Route::post('/stock/zerar-tudo', [StockController::class, 'zerarTudo']); // zerar estoque geral
 
 // Produtos / integração Microvix
 Route::get('/products/validar-microvix', [ProductController::class, 'validarMicrovix']);

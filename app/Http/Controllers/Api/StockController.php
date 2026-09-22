@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Stock;
 use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -82,5 +83,19 @@ class StockController extends Controller
             'produto'     => $stock->product?->nome,
             'quantidade'  => (float) $stock->quantidade,
         ];
+    }
+
+    /**
+     * Zera TODO o estoque (todos os endereços). Ação destrutiva.
+     *
+     * POST /api/stock/zerar-tudo
+     */
+    public function zerarTudo(): JsonResponse
+    {
+        $afetados = Stock::where('quantidade', '!=', 0)->update(['quantidade' => 0]);
+
+        return response()->json([
+            'message' => "Estoque geral zerado ({$afetados} registro(s) de estoque).",
+        ]);
     }
 }

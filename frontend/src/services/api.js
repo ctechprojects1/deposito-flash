@@ -41,6 +41,12 @@ export async function zerarEndereco(id) {
   return data;
 }
 
+/** Zera TODO o estoque (todos os endereços). Ação destrutiva. */
+export async function zerarEstoqueGeral() {
+  const { data } = await api.post("/stock/zerar-tudo");
+  return data;
+}
+
 /**
  * Valida um código no Microvix e traz o nome + product_id local.
  */
