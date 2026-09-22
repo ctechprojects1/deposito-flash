@@ -47,6 +47,18 @@ export async function zerarEstoqueGeral() {
   return data;
 }
 
+/* ===================== Movimentação ===================== */
+
+export async function criarMovimentacao(payload) {
+  const { data } = await api.post("/movements", payload);
+  return data;
+}
+
+export async function fetchMovimentacoes(filtros = {}) {
+  const { data } = await api.get("/movements", { params: filtros });
+  return data.data ?? [];
+}
+
 /**
  * Valida um código no Microvix e traz o nome + product_id local.
  */

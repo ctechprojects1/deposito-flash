@@ -4,9 +4,11 @@ import RequestForm from "./components/RequestForm";
 import PickerDashboard from "./components/PickerDashboard";
 import ImportScreen from "./components/ImportScreen";
 import InventoryScreen from "./components/InventoryScreen";
+import MovementScreen from "./components/MovementScreen";
 
 const ABAS = [
   { id: "mapa", label: "Mapa do Estoque", icone: "🗺️", componente: StockMap },
+  { id: "movimentar", label: "Movimentação", icone: "🔄", componente: MovementScreen },
   { id: "solicitar", label: "Nova Solicitação", icone: "📝", componente: RequestForm },
   { id: "separar", label: "Painel do Separador", icone: "📦", componente: PickerDashboard },
   { id: "contagem", label: "Contagem", icone: "✓", componente: InventoryScreen },

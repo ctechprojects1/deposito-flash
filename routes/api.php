@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\InventoryCountController;
 use App\Http\Controllers\Api\LocationController;
+use App\Http\Controllers\Api\MovementController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\WithdrawalRequestController;
@@ -30,6 +31,10 @@ Route::post('/stock/entrada', [StockController::class, 'entrada']);
 Route::post('/stock/baixa', [StockController::class, 'baixa']);
 Route::post('/stock/import', [ImportController::class, 'importar']); // upload de CSV
 Route::post('/stock/zerar-tudo', [StockController::class, 'zerarTudo']); // zerar estoque geral
+
+// Movimentação entre endereços + relatório
+Route::get('/movements', [MovementController::class, 'index']);
+Route::post('/movements', [MovementController::class, 'store']);
 
 // Produtos / integração Microvix
 Route::get('/products/validar-microvix', [ProductController::class, 'validarMicrovix']);
