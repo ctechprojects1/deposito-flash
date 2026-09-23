@@ -58,7 +58,7 @@ export default function UsersScreen() {
     <div className="mx-auto max-w-4xl px-4">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-extrabold text-slate-800">Usuários & Permissões</h1>
-        <button onClick={() => setEditando({})} className="btn-nuvem">➕ Novo usuário</button>
+        <button onClick={() => setEditando({})} className="btn-nuvem">Novo usuário</button>
       </div>
 
       {erro && <div className="mb-4 rounded-xl bg-rose-100 p-3 text-sm text-rose-800">{erro}</div>}

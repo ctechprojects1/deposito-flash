@@ -88,7 +88,7 @@ export default function StockMap() {
           <Legenda />
           {podeGerenciar && (
             <button onClick={() => setGerenciar(true)} className="btn-nuvem">
-              ➕ Endereços
+              Gerenciar endereços
             </button>
           )}
         </div>

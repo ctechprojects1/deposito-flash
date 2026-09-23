@@ -173,7 +173,7 @@ function Card({ solicitacao, mostrarLocais = false, children }) {
               <div className="mt-1">
                 {item.locais_disponiveis?.length > 0 ? (
                   <p className="text-xs text-blue-700">
-                    📍 Ir ao Time:{" "}
+                    Ir ao Time:{" "}
                     <span className="font-bold">
                       {item.locais_disponiveis[0].nome}
                     </span>{" "}
@@ -181,7 +181,7 @@ function Card({ solicitacao, mostrarLocais = false, children }) {
                   </p>
                 ) : (
                   <p className="text-xs text-red-600">
-                    ⚠ Sem estoque disponível para este item.
+                    Sem estoque disponível para este item.
                   </p>
                 )}
               </div>
@@ -197,7 +197,7 @@ function Card({ solicitacao, mostrarLocais = false, children }) {
           rel="noreferrer"
           className="mb-3 block text-xs font-medium text-blue-600 hover:underline"
         >
-          Ver Nota de Saída ↗
+          Ver Nota de Saída
         </a>
       )}
 

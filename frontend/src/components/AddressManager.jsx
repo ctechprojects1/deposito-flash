@@ -118,8 +118,8 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
               {time.trim() === ""
                 ? " "
                 : existe
-                ? "➕ Time existente — as posições novas serão adicionadas a ele."
-                : "✨ Time novo — será criado."}
+                ? "Time existente — as posições novas serão adicionadas a ele."
+                : "Time novo — será criado."}
             </p>
           </div>
 
@@ -173,7 +173,7 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
 
           {/* Zona de perigo — zerar estoque geral */}
           <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4">
-            <h3 className="text-sm font-bold text-rose-700">⚠ Zona de perigo</h3>
+            <h3 className="text-sm font-bold text-rose-700">Zona de perigo</h3>
             <p className="mt-1 text-xs text-rose-600">
               Zerar o estoque geral coloca a quantidade de <strong>todos os endereços</strong> em 0.
               Não pode ser desfeito. Para confirmar, digite <strong>ZERAR</strong> abaixo.

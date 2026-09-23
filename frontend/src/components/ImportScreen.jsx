@@ -87,7 +87,7 @@ export default function ImportScreen() {
 
       {resultado && (
         <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-5">
-          <h2 className="mb-3 font-bold text-green-800">Importação concluída ✓</h2>
+          <h2 className="mb-3 font-bold text-green-800">Importação concluída</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Contador rotulo="Linhas OK" valor={resultado.importados} cor="text-green-700" />
             <Contador rotulo="Ignoradas" valor={resultado.ignorados} cor="text-yellow-700" />

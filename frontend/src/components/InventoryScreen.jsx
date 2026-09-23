@@ -352,7 +352,7 @@ function PainelEndereco({ endereco, contagemId, onSalvou }) {
         <button onClick={salvar} disabled={salvando} className="btn-ok">
           {salvando ? "Salvando..." : "Salvar endereço"}
         </button>
-        {ok && <span className="text-sm font-semibold text-emerald-600">✓ Salvo</span>}
+        {ok && <span className="text-sm font-semibold text-emerald-600">Salvo</span>}
       </div>
     </div>
   );
@@ -429,7 +429,7 @@ function DivergenciasModal({ contagemId, onClose }) {
             <p className="text-center text-gray-400">Carregando...</p>
           ) : dados.itens.length === 0 ? (
             <p className="py-6 text-center text-green-600">
-              Nenhuma divergência 🎉 (o que foi contado bateu com o sistema)
+              Nenhuma divergência (o que foi contado bateu com o sistema)
             </p>
           ) : (
             <>

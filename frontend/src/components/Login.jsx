@@ -29,12 +29,9 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-500 text-2xl shadow-lg shadow-indigo-500/30">
-            📦
-          </div>
+          <img src="/logo-flash.png" alt="Flash Universo de Produtos" className="h-24 w-auto object-contain" />
           <div className="text-center">
             <h1 className="text-lg font-extrabold text-slate-800">Endereçamento de Estoque</h1>
-            <p className="text-xs font-medium text-slate-400">Depósito Flash</p>
           </div>
         </div>
 
