@@ -144,6 +144,13 @@ export async function fetchMovimentacoes(filtros = {}) {
   return data.data ?? [];
 }
 
+/* ===================== Relatórios ===================== */
+
+export async function relatorioProdutoLocalizacao(q) {
+  const { data } = await api.get("/reports/produto-localizacao", { params: { q } });
+  return data.data ?? [];
+}
+
 /**
  * Valida um código no Microvix e traz o nome + product_id local.
  */

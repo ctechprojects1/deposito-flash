@@ -14,6 +14,7 @@ const PERM_LABELS = {
   separar: "Separação",
   contar: "Contagem / Inventário",
   importar: "Importar CSV",
+  relatorios: "Relatórios",
   gerenciar_enderecos: "Gerenciar endereços",
   admin: "Administração (usuários)",
 };

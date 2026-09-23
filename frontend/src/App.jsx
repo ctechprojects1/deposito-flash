@@ -7,6 +7,7 @@ import PickerDashboard from "./components/PickerDashboard";
 import ImportScreen from "./components/ImportScreen";
 import InventoryScreen from "./components/InventoryScreen";
 import MovementScreen from "./components/MovementScreen";
+import ReportsScreen from "./components/ReportsScreen";
 import UsersScreen from "./components/UsersScreen";
 
 const ABAS = [
@@ -15,6 +16,7 @@ const ABAS = [
   { id: "solicitar", label: "Nova Solicitação", perm: "solicitar", componente: RequestForm },
   { id: "separar", label: "Painel do Separador", perm: "separar", componente: PickerDashboard },
   { id: "contagem", label: "Contagem", perm: "contar", componente: InventoryScreen },
+  { id: "relatorios", label: "Relatórios", perm: "relatorios", componente: ReportsScreen },
   { id: "importar", label: "Importar Estoque", perm: "importar", componente: ImportScreen },
   { id: "usuarios", label: "Usuários", perm: "admin", componente: UsersScreen },
 ];

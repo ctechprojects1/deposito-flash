@@ -6,8 +6,8 @@
     <link rel="icon" type="image/png" href="/logo-flash.png" />
     <link rel="apple-touch-icon" href="/logo-flash.png" />
     <title>Flash · Endereçamento de Estoque</title>
-    <script type="module" crossorigin src="/assets/index-Dki8mDmL.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Cs0kZTgx.css">
+    <script type="module" crossorigin src="/assets/index-DOhZzQy-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Dd1hiCAk.css">
   </head>
   <body>
     <div id="root"></div>

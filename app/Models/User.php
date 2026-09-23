@@ -25,6 +25,7 @@ class User extends Authenticatable
         'separar',
         'contar',
         'importar',
+        'relatorios',
         'gerenciar_enderecos',
         'admin',
     ];
