@@ -19,6 +19,7 @@ class Product extends Model
 
     protected $fillable = [
         'codigo_microvix',
+        'codigo_barras',
         'nome',
         'status',
     ];

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Location;
+use App\Models\Product;
+use App\Models\Stock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,6 +40,7 @@ class LocationController extends Controller
                             'stock_id'        => $stock->id,
                             'product_id'      => $stock->product_id,
                             'codigo_microvix' => $stock->product?->codigo_microvix,
+                            'codigo_barras'   => $stock->product?->codigo_barras,
                             'nome'            => $stock->product?->nome,
                             'quantidade'      => (float) $stock->quantidade,
                         ];
@@ -152,5 +155,75 @@ class LocationController extends Controller
         return response()->json([
             'message' => "Estoque de {$location->nome} zerado ({$afetados} produto(s)).",
         ]);
+    }
+
+    /**
+     * Adiciona um produto a um endereço (cria o produto se necessário).
+     *
+     * POST /api/locations/{location}/produtos
+     *   { nome, codigo_barras?, codigo_microvix?, quantidade? }
+     */
+    public function adicionarProduto(Request $request, Location $location): JsonResponse
+    {
+        $dados = $request->validate([
+            'nome'            => ['required', 'string', 'max:191'],
+            'codigo_barras'   => ['nullable', 'string', 'max:60'],
+            'codigo_microvix' => ['nullable', 'string', 'max:60'],
+            'quantidade'      => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $codMicrovix = $dados['codigo_microvix'] ?? null;
+        $codBarras   = $dados['codigo_barras'] ?? null;
+
+        return DB::transaction(function () use ($dados, $location, $codMicrovix, $codBarras) {
+            // Reaproveita produto existente pelo código (microvix ou barras); senão cria.
+            $product = null;
+            if ($codMicrovix) {
+                $product = Product::where('codigo_microvix', $codMicrovix)->first();
+            }
+            if (! $product && $codBarras) {
+                $product = Product::where('codigo_barras', $codBarras)->first();
+            }
+
+            if (! $product) {
+                $product = Product::create([
+                    'nome'            => $dados['nome'],
+                    'codigo_microvix' => $codMicrovix ?: null,
+                    'codigo_barras'   => $codBarras ?: null,
+                    'status'          => Product::STATUS_ATIVO,
+                ]);
+            }
+
+            // Já existe neste endereço?
+            $existe = Stock::where('location_id', $location->id)
+                ->where('product_id', $product->id)->exists();
+            if ($existe) {
+                return response()->json(['message' => 'Este produto já está neste endereço.'], 422);
+            }
+
+            Stock::create([
+                'location_id' => $location->id,
+                'product_id'  => $product->id,
+                'quantidade'  => $dados['quantidade'] ?? 0,
+            ]);
+
+            return response()->json(['message' => 'Produto adicionado ao endereço.'], 201);
+        });
+    }
+
+    /**
+     * Remove um produto de um endereço (apaga o registro de estoque).
+     *
+     * DELETE /api/locations/{location}/produtos/{stock}
+     */
+    public function removerProduto(Location $location, Stock $stock): JsonResponse
+    {
+        if ($stock->location_id !== $location->id) {
+            return response()->json(['message' => 'Item não pertence a este endereço.'], 404);
+        }
+
+        $stock->delete();
+
+        return response()->json(['message' => 'Produto removido do endereço.']);
     }
 }

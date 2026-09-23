@@ -108,6 +108,18 @@ export async function zerarEndereco(id) {
   return data;
 }
 
+/** Adiciona um produto a um endereço. */
+export async function adicionarProdutoLocal(locationId, payload) {
+  const { data } = await api.post(`/locations/${locationId}/produtos`, payload);
+  return data;
+}
+
+/** Remove um produto (registro de estoque) de um endereço. */
+export async function removerProdutoLocal(locationId, stockId) {
+  const { data } = await api.delete(`/locations/${locationId}/produtos/${stockId}`);
+  return data;
+}
+
 /** Zera TODO o estoque (todos os endereços). Ação destrutiva. */
 export async function zerarEstoqueGeral() {
   const { data } = await api.post("/stock/zerar-tudo");
