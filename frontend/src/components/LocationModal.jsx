@@ -4,6 +4,7 @@ import {
   zerarEndereco,
   adicionarProdutoLocal,
   removerProdutoLocal,
+  atualizarSaldoLocal,
 } from "../services/api";
 
 /**
@@ -20,6 +21,31 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
   const [novo, setNovo] = useState({ nome: "", codigo_barras: "", codigo_microvix: "", quantidade: "" });
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState(null);
+
+  // Edição inline de saldo (mapa stock_id -> valor digitado)
+  const [edicao, setEdicao] = useState({});
+  const [salvandoSaldo, setSalvandoSaldo] = useState(null);
+
+  async function salvarSaldo(p) {
+    const val = edicao[p.stock_id];
+    if (val === undefined) return;
+    const q = Number(val);
+    if (isNaN(q) || q < 0) return;
+    setSalvandoSaldo(p.stock_id);
+    try {
+      await atualizarSaldoLocal(detalhe.id, p.stock_id, q);
+      setEdicao((e) => {
+        const n = { ...e };
+        delete n[p.stock_id];
+        return n;
+      });
+      await recarregar();
+    } catch (e) {
+      alert(e?.response?.data?.message || "Erro ao atualizar o saldo.");
+    } finally {
+      setSalvandoSaldo(null);
+    }
+  }
 
   async function recarregar() {
     const atualizado = await fetchLocation(detalhe.id);
@@ -137,7 +163,35 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                       {p.codigo_barras && <span>Barras: {p.codigo_barras}</span>}
                     </div>
                   </div>
-                  <span className="whitespace-nowrap font-semibold text-slate-800">{Number(p.quantidade)}</span>
+                  {podeGerenciar ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={edicao[p.stock_id] ?? String(p.quantidade)}
+                        onChange={(e) => setEdicao((s) => ({ ...s, [p.stock_id]: e.target.value }))}
+                        onKeyDown={(e) => e.key === "Enter" && salvarSaldo(p)}
+                        className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm shadow-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        title="Saldo (edite e salve)"
+                      />
+                      {edicao[p.stock_id] !== undefined &&
+                        Number(edicao[p.stock_id]) !== Number(p.quantidade) && (
+                          <button
+                            onClick={() => salvarSaldo(p)}
+                            disabled={salvandoSaldo === p.stock_id}
+                            title="Salvar saldo"
+                            className="rounded-full p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </button>
+                        )}
+                    </div>
+                  ) : (
+                    <span className="whitespace-nowrap font-semibold text-slate-800">{Number(p.quantidade)}</span>
+                  )}
                   {podeGerenciar && (
                     <button
                       onClick={() => remover(p)}

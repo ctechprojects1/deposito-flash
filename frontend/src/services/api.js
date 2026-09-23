@@ -114,6 +114,12 @@ export async function adicionarProdutoLocal(locationId, payload) {
   return data;
 }
 
+/** Atualiza o saldo (quantidade) de um produto num endereço. */
+export async function atualizarSaldoLocal(locationId, stockId, quantidade) {
+  const { data } = await api.put(`/locations/${locationId}/produtos/${stockId}`, { quantidade });
+  return data;
+}
+
 /** Remove um produto (registro de estoque) de um endereço. */
 export async function removerProdutoLocal(locationId, stockId) {
   const { data } = await api.delete(`/locations/${locationId}/produtos/${stockId}`);

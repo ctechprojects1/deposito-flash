@@ -212,6 +212,26 @@ class LocationController extends Controller
     }
 
     /**
+     * Ajusta o saldo de um produto num endereço (define a quantidade).
+     *
+     * PUT /api/locations/{location}/produtos/{stock}  { quantidade }
+     */
+    public function atualizarSaldo(Request $request, Location $location, Stock $stock): JsonResponse
+    {
+        if ($stock->location_id !== $location->id) {
+            return response()->json(['message' => 'Item não pertence a este endereço.'], 404);
+        }
+
+        $dados = $request->validate([
+            'quantidade' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $stock->update(['quantidade' => $dados['quantidade']]);
+
+        return response()->json(['message' => 'Saldo atualizado.']);
+    }
+
+    /**
      * Remove um produto de um endereço (apaga o registro de estoque).
      *
      * DELETE /api/locations/{location}/produtos/{stock}
