@@ -150,6 +150,25 @@ export async function fetchMovimentacoes(filtros = {}) {
   return data.data ?? [];
 }
 
+/* ===================== Microvix ===================== */
+
+/** Consulta um código de barras (ou código interno) no Microvix. */
+export async function consultarMicrovix(codigo) {
+  const { data } = await api.get("/microvix/consultar", { params: { codigo } });
+  return data; // { encontrado, produto, sync_pendente, mensagem }
+}
+
+/** Sincroniza um lote da base de códigos de barras. */
+export async function sincronizarMicrovix() {
+  const { data } = await api.post("/microvix/sincronizar");
+  return data; // { paginas, upserts, concluido, total }
+}
+
+export async function statusMicrovix() {
+  const { data } = await api.get("/microvix/status");
+  return data; // { total, ultima_sync, configurado }
+}
+
 /* ===================== Relatórios ===================== */
 
 export async function relatorioProdutoLocalizacao(q) {

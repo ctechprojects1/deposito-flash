@@ -67,7 +67,8 @@ export default function StockMap() {
     return Array.from(grupos.values()).sort((a, b) => a.ordem - b.ordem || a.time.localeCompare(b.time));
   }, [locations]);
 
-  if (loading)
+  // Só bloqueia a tela na PRIMEIRA carga; recargas mantêm o mapa (e o modal aberto).
+  if (loading && locations.length === 0)
     return <div className="flex h-64 items-center justify-center text-slate-400">Carregando mapa...</div>;
   if (erro)
     return (

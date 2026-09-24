@@ -192,6 +192,19 @@ class LocationController extends Controller
                     'codigo_barras'   => $codBarras ?: null,
                     'status'          => Product::STATUS_ATIVO,
                 ]);
+            } else {
+                // Produto já existia: completa códigos que estiverem faltando
+                // (ex.: veio do Microvix), sem colidir com outro produto.
+                if (! $product->codigo_microvix && $codMicrovix) {
+                    $product->codigo_microvix = $codMicrovix;
+                }
+                if (! $product->codigo_barras && $codBarras
+                    && ! Product::where('codigo_barras', $codBarras)->where('id', '!=', $product->id)->exists()) {
+                    $product->codigo_barras = $codBarras;
+                }
+                if ($product->isDirty()) {
+                    $product->save();
+                }
             }
 
             // Já existe neste endereço?

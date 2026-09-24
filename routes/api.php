@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\InventoryCountController;
 use App\Http\Controllers\Api\LocationController;
+use App\Http\Controllers\Api\MicrovixController;
 use App\Http\Controllers\Api\MovementController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReportController;
@@ -50,6 +51,13 @@ Route::middleware('auth.token')->group(function () {
     // Produtos / Microvix (usado pela solicitação)
     Route::get('/products/validar-microvix', [ProductController::class, 'validarMicrovix'])->middleware('perm:solicitar');
     Route::get('/products/{product}/locais', [ProductController::class, 'locais'])->middleware('perm:solicitar');
+
+    // Microvix (consulta de produto + base de códigos de barras)
+    Route::middleware('perm:gerenciar_enderecos')->group(function () {
+        Route::get('/microvix/consultar', [MicrovixController::class, 'consultar']);
+        Route::post('/microvix/sincronizar', [MicrovixController::class, 'sincronizar']);
+        Route::get('/microvix/status', [MicrovixController::class, 'status']);
+    });
 
     // Relatórios
     Route::get('/reports/produto-localizacao', [ReportController::class, 'produtoLocalizacao'])->middleware('perm:relatorios');

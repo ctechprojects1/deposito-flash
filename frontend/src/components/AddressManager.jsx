@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { criarEnderecos, zerarEstoqueGeral } from "../services/api";
+import { criarEnderecos, zerarEstoqueGeral, statusMicrovix, sincronizarMicrovix } from "../services/api";
 
 // Posições comuns (níveis 1-5, lados A/B). Chips em vez de checkbox.
 const PRESETS = [];
@@ -18,6 +18,39 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
   const [erro, setErro] = useState(null);
   const [confirmGeral, setConfirmGeral] = useState("");
   const [zerandoGeral, setZerandoGeral] = useState(false);
+
+  // Base de códigos de barras do Microvix
+  const [mvx, setMvx] = useState(null);
+  const [syncMvx, setSyncMvx] = useState(null);
+
+  async function carregarStatusMvx() {
+    try {
+      setMvx(await statusMicrovix());
+    } catch {
+      setMvx(null);
+    }
+  }
+
+  useEffect(() => {
+    carregarStatusMvx();
+  }, []);
+
+  async function sincronizarMvx() {
+    setErro(null);
+    setSyncMvx("Sincronizando...");
+    try {
+      for (let i = 0; i < 40; i++) {
+        const r = await sincronizarMicrovix();
+        setSyncMvx(`Sincronizando... ${Number(r.total).toLocaleString("pt-BR")} códigos`);
+        if (r.concluido) break;
+      }
+      await carregarStatusMvx();
+    } catch (e) {
+      setErro(e?.response?.data?.message || "Falha ao sincronizar com o Microvix.");
+    } finally {
+      setSyncMvx(null);
+    }
+  }
 
   async function zerarGeral() {
     if (confirmGeral.trim().toUpperCase() !== "ZERAR") return;
@@ -169,6 +202,24 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
                 Adicionar
               </button>
             </div>
+          </div>
+
+          {/* Base de códigos de barras do Microvix */}
+          <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-4">
+            <h3 className="text-sm font-bold text-slate-700">Microvix — códigos de barras</h3>
+            <p className="mt-1 text-xs text-slate-600">
+              {mvx
+                ? mvx.total > 0
+                  ? `${Number(mvx.total).toLocaleString("pt-BR")} códigos na base · atualizada em ${mvx.ultima_sync}`
+                  : "Base ainda não sincronizada. Sincronize antes de bipar produtos."
+                : "Carregando..."}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              A busca já atualiza sozinha quando um código não é encontrado. Use o botão para forçar.
+            </p>
+            <button type="button" onClick={sincronizarMvx} disabled={!!syncMvx} className="btn-ghost mt-3">
+              {syncMvx || "Sincronizar agora"}
+            </button>
           </div>
 
           {/* Zona de perigo — zerar estoque geral */}

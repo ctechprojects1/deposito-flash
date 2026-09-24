@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchLocation,
   fetchLocations,
@@ -7,6 +7,8 @@ import {
   removerProdutoLocal,
   atualizarSaldoLocal,
   replicarParaLocal,
+  consultarMicrovix,
+  sincronizarMicrovix,
 } from "../services/api";
 
 /**
@@ -21,6 +23,15 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
   // Form de novo produto
   const [mostrarForm, setMostrarForm] = useState(false);
   const [novo, setNovo] = useState({ nome: "", codigo_barras: "", codigo_microvix: "", quantidade: "" });
+
+  // Consulta Microvix no "Adicionar produto"
+  const [codigoBusca, setCodigoBusca] = useState("");
+  const [consulta, setConsulta] = useState(null); // {status, produto?, mensagem?}
+  const [manual, setManual] = useState(false);
+  const [okMsg, setOkMsg] = useState(null);
+  const [sincronizando, setSincronizando] = useState(null);
+  const scanRef = useRef(null);
+  const qtdRef = useRef(null);
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState(null);
 
@@ -147,20 +158,89 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
     }
   }
 
+  // Bipa/digita o código -> consulta o Microvix.
+  async function buscarCodigo() {
+    const c = codigoBusca.trim();
+    if (!c) return;
+    setErroForm(null);
+    setOkMsg(null);
+    setManual(false);
+    setConsulta({ status: "buscando" });
+    try {
+      const r = await consultarMicrovix(c);
+      if (r.encontrado) {
+        setConsulta({ status: "encontrado", produto: r.produto });
+        setNovo((n) => ({ ...n, quantidade: "" }));
+        setTimeout(() => qtdRef.current?.focus(), 50);
+      } else {
+        setConsulta({ status: r.sync_pendente ? "sync_pendente" : "nao_encontrado", mensagem: r.mensagem });
+      }
+    } catch (e) {
+      setConsulta({ status: "nao_encontrado", mensagem: e?.response?.data?.message || "Falha ao consultar o Microvix." });
+    }
+  }
+
+  // Primeira sincronização da base de códigos (em lotes), depois refaz a busca.
+  async function sincronizarBase() {
+    setErroForm(null);
+    setSincronizando("Sincronizando códigos do Microvix...");
+    try {
+      for (let i = 0; i < 40; i++) {
+        const r = await sincronizarMicrovix();
+        setSincronizando(`Sincronizando... ${Number(r.total).toLocaleString("pt-BR")} códigos`);
+        if (r.concluido) break;
+      }
+      setSincronizando(null);
+      await buscarCodigo();
+    } catch (e) {
+      setSincronizando(null);
+      setErroForm(e?.response?.data?.message || "Falha ao sincronizar com o Microvix.");
+    }
+  }
+
+  function cadastrarManual() {
+    setManual(true);
+    setNovo({ nome: "", codigo_barras: codigoBusca.trim(), codigo_microvix: "", quantidade: "" });
+  }
+
+  function fecharNovo() {
+    setMostrarForm(false);
+    setErroForm(null);
+    setOkMsg(null);
+    setConsulta(null);
+    setManual(false);
+    setCodigoBusca("");
+  }
+
   async function adicionar() {
     setErroForm(null);
-    if (!novo.nome.trim()) return setErroForm("A descrição é obrigatória.");
-    setSalvando(true);
-    try {
-      await adicionarProdutoLocal(detalhe.id, {
+    let payload;
+    if (consulta?.status === "encontrado") {
+      const p = consulta.produto;
+      payload = { nome: p.nome, codigo_barras: p.cod_barra || null, codigo_microvix: p.cod_produto || null };
+    } else if (manual) {
+      if (!novo.nome.trim()) return setErroForm("A descrição é obrigatória.");
+      payload = {
         nome: novo.nome.trim(),
         codigo_barras: novo.codigo_barras.trim() || null,
         codigo_microvix: novo.codigo_microvix.trim() || null,
-        quantidade: novo.quantidade === "" ? 0 : Number(novo.quantidade),
-      });
+      };
+    } else {
+      return;
+    }
+    payload.quantidade = novo.quantidade === "" ? 0 : Number(novo.quantidade);
+
+    setSalvando(true);
+    try {
+      await adicionarProdutoLocal(detalhe.id, payload);
+      setOkMsg(`Adicionado: ${payload.nome}`);
+      setCodigoBusca("");
+      setConsulta(null);
+      setManual(false);
       setNovo({ nome: "", codigo_barras: "", codigo_microvix: "", quantidade: "" });
-      setMostrarForm(false);
       await recarregar();
+      // Pronto para o próximo bip.
+      setTimeout(() => scanRef.current?.focus(), 50);
     } catch (e) {
       setErroForm(e?.response?.data?.message || "Erro ao adicionar o produto.");
     } finally {
@@ -280,43 +360,125 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                 <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
                   <h3 className="mb-2 text-sm font-bold text-slate-700">Novo produto</h3>
                   {erroForm && <div className="mb-2 rounded-lg bg-rose-100 p-2 text-xs text-rose-800">{erroForm}</div>}
-                  <div className="space-y-2">
+                  {okMsg && <div className="mb-2 rounded-lg bg-emerald-100 p-2 text-xs text-emerald-800">{okMsg}</div>}
+
+                  {/* 1) Bipar / digitar o código */}
+                  <div className="flex gap-2">
                     <input
-                      value={novo.nome}
-                      onChange={(e) => setNovo((n) => ({ ...n, nome: e.target.value }))}
-                      placeholder="Descrição (obrigatório)"
-                      className="input-nuvem"
+                      ref={scanRef}
+                      value={codigoBusca}
+                      onChange={(e) => setCodigoBusca(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          buscarCodigo();
+                        }
+                      }}
+                      placeholder="Bipe ou digite o código de barras / código Microvix"
+                      className="input-nuvem flex-1"
                       autoFocus
                     />
-                    <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={buscarCodigo}
+                      disabled={!codigoBusca.trim() || consulta?.status === "buscando"}
+                      className="btn-nuvem whitespace-nowrap"
+                    >
+                      Buscar
+                    </button>
+                  </div>
+
+                  {consulta?.status === "buscando" && (
+                    <p className="mt-2 text-xs text-slate-500">Consultando Microvix...</p>
+                  )}
+
+                  {/* 2a) Encontrado: só falta a quantidade */}
+                  {consulta?.status === "encontrado" && (
+                    <div className="mt-3 rounded-lg bg-white p-3 ring-1 ring-emerald-200">
+                      <div className="text-sm font-semibold text-slate-800">{consulta.produto.nome}</div>
+                      <div className="mt-0.5 flex flex-wrap gap-x-3 font-mono text-xs text-slate-500">
+                        <span>Cód. interno: {consulta.produto.cod_produto || "—"}</span>
+                        <span>Barras: {consulta.produto.cod_barra || "—"}</span>
+                      </div>
+                      {consulta.produto.desativado && (
+                        <p className="mt-1 text-xs font-semibold text-amber-700">Atenção: produto desativado no Microvix.</p>
+                      )}
                       <input
-                        value={novo.codigo_barras}
-                        onChange={(e) => setNovo((n) => ({ ...n, codigo_barras: e.target.value }))}
-                        placeholder="Código de barras (opcional)"
-                        className="input-nuvem"
+                        ref={qtdRef}
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={novo.quantidade}
+                        onChange={(e) => setNovo((n) => ({ ...n, quantidade: e.target.value }))}
+                        onKeyDown={(e) => e.key === "Enter" && adicionar()}
+                        placeholder="Quantidade"
+                        className="input-nuvem mt-2"
                       />
+                    </div>
+                  )}
+
+                  {/* 2b) Não encontrado */}
+                  {consulta?.status === "nao_encontrado" && !manual && (
+                    <div className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800 ring-1 ring-rose-200">
+                      {consulta.mensagem}
+                      <button onClick={cadastrarManual} className="mt-2 block text-xs font-semibold text-rose-700 underline">
+                        Cadastrar manualmente mesmo assim
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 2c) Base de códigos ainda não sincronizada */}
+                  {consulta?.status === "sync_pendente" && (
+                    <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 ring-1 ring-amber-200">
+                      {consulta.mensagem} É feito uma vez só (leva cerca de 1 minuto).
+                      <button onClick={sincronizarBase} disabled={!!sincronizando} className="btn-nuvem mt-2 w-full">
+                        {sincronizando || "Sincronizar agora"}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Cadastro manual (fallback) */}
+                  {manual && (
+                    <div className="mt-3 space-y-2">
                       <input
-                        value={novo.codigo_microvix}
-                        onChange={(e) => setNovo((n) => ({ ...n, codigo_microvix: e.target.value }))}
-                        placeholder="Cód. Microvix (opcional)"
+                        value={novo.nome}
+                        onChange={(e) => setNovo((n) => ({ ...n, nome: e.target.value }))}
+                        placeholder="Descrição (obrigatório)"
+                        className="input-nuvem"
+                        autoFocus
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          value={novo.codigo_barras}
+                          onChange={(e) => setNovo((n) => ({ ...n, codigo_barras: e.target.value }))}
+                          placeholder="Código de barras (opcional)"
+                          className="input-nuvem"
+                        />
+                        <input
+                          value={novo.codigo_microvix}
+                          onChange={(e) => setNovo((n) => ({ ...n, codigo_microvix: e.target.value }))}
+                          placeholder="Cód. Microvix (opcional)"
+                          className="input-nuvem"
+                        />
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={novo.quantidade}
+                        onChange={(e) => setNovo((n) => ({ ...n, quantidade: e.target.value }))}
+                        placeholder="Quantidade (opcional, padrão 0)"
                         className="input-nuvem"
                       />
                     </div>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={novo.quantidade}
-                      onChange={(e) => setNovo((n) => ({ ...n, quantidade: e.target.value }))}
-                      placeholder="Quantidade (opcional, padrão 0)"
-                      className="input-nuvem"
-                    />
-                  </div>
+                  )}
+
                   <div className="mt-3 flex justify-end gap-2">
-                    <button onClick={() => { setMostrarForm(false); setErroForm(null); }} className="btn-ghost">Cancelar</button>
-                    <button onClick={adicionar} disabled={salvando} className="btn-nuvem">
-                      {salvando ? "Adicionando..." : "Adicionar"}
-                    </button>
+                    <button onClick={fecharNovo} className="btn-ghost">Fechar</button>
+                    {(consulta?.status === "encontrado" || manual) && (
+                      <button onClick={adicionar} disabled={salvando} className="btn-nuvem">
+                        {salvando ? "Adicionando..." : "Adicionar"}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
