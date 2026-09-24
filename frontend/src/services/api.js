@@ -120,6 +120,12 @@ export async function atualizarSaldoLocal(locationId, stockId, quantidade) {
   return data;
 }
 
+/** Replica produtos (com quantidades) para um endereço. */
+export async function replicarParaLocal(locationId, itens) {
+  const { data } = await api.post(`/locations/${locationId}/replicar`, { itens });
+  return data;
+}
+
 /** Remove um produto (registro de estoque) de um endereço. */
 export async function removerProdutoLocal(locationId, stockId) {
   const { data } = await api.delete(`/locations/${locationId}/produtos/${stockId}`);

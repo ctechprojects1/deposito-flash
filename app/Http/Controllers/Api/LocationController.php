@@ -212,6 +212,37 @@ class LocationController extends Controller
     }
 
     /**
+     * Replica produtos (com quantidades) para este endereço.
+     * Usa updateOrCreate: cria os que faltam e ajusta os já existentes.
+     *
+     * POST /api/locations/{location}/replicar
+     *   { itens: [ { product_id, quantidade }, ... ] }
+     */
+    public function replicar(Request $request, Location $location): JsonResponse
+    {
+        $dados = $request->validate([
+            'itens'                => ['required', 'array', 'min:1'],
+            'itens.*.product_id'   => ['required', 'integer', 'exists:products,id'],
+            'itens.*.quantidade'   => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $n = 0;
+        DB::transaction(function () use ($dados, $location, &$n) {
+            foreach ($dados['itens'] as $it) {
+                Stock::updateOrCreate(
+                    ['location_id' => $location->id, 'product_id' => $it['product_id']],
+                    ['quantidade' => $it['quantidade']]
+                );
+                $n++;
+            }
+        });
+
+        return response()->json([
+            'message' => "{$n} produto(s) replicado(s) para {$location->nome}.",
+        ]);
+    }
+
+    /**
      * Ajusta o saldo de um produto num endereço (define a quantidade).
      *
      * PUT /api/locations/{location}/produtos/{stock}  { quantidade }
