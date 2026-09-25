@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchLocations } from "../services/api";
 import { useAuth } from "../AuthContext";
 import LocationModal from "./LocationModal";
+import useAutoRefresh from "../hooks/useAutoRefresh";
 import AddressManager from "./AddressManager";
 
 const LIMITE_BAIXO = 10;
@@ -44,6 +45,12 @@ export default function StockMap() {
   useEffect(() => {
     carregar();
   }, []);
+
+  // Atualiza os saldos sozinho (movimentações/baixas de outros usuários).
+  // Pausa com um popup aberto, pra não mexer no que o operador está vendo.
+  useAutoRefresh(async () => {
+    setLocations(await fetchLocations());
+  }, 30000, !selecionado && !gerenciar);
 
   const posicoes = useMemo(() => {
     const set = new Set();

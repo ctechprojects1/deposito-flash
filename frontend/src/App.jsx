@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "./AuthContext";
 import Login from "./components/Login";
 import StockMap from "./components/StockMap";
@@ -9,6 +9,8 @@ import InventoryScreen from "./components/InventoryScreen";
 import MovementScreen from "./components/MovementScreen";
 import ReportsScreen from "./components/ReportsScreen";
 import UsersScreen from "./components/UsersScreen";
+import useAutoRefresh from "./hooks/useAutoRefresh";
+import { fetchSolicitacoes } from "./services/api";
 
 const ABAS = [
   { id: "mapa", label: "Mapa do Estoque", perm: "ver_mapa", componente: StockMap },
@@ -27,6 +29,21 @@ export default function App() {
   // Abas que o usuário pode ver.
   const abas = useMemo(() => (user ? ABAS.filter((a) => hasPerm(a.perm)) : []), [user]);
   const [aba, setAba] = useState(null);
+
+  // Quantas solicitações aguardam separação (badge na aba + título do navegador).
+  const podeSeparar = !!user && hasPerm("separar");
+  const [aguardando, setAguardando] = useState(0);
+  const contarAguardando = async () => setAguardando((await fetchSolicitacoes("pendente")).length);
+
+  useEffect(() => {
+    if (podeSeparar) contarAguardando().catch(() => {});
+    else setAguardando(0);
+  }, [podeSeparar]);
+  useAutoRefresh(contarAguardando, 20000, podeSeparar);
+
+  useEffect(() => {
+    document.title = (aguardando > 0 ? `(${aguardando}) ` : "") + "Flash · Endereçamento de Estoque";
+  }, [aguardando]);
 
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center text-slate-400">Carregando...</div>;
@@ -74,6 +91,16 @@ export default function App() {
                   }`}
                 >
                   {a.label}
+                  {a.id === "separar" && aguardando > 0 && (
+                    <span
+                      title={`${aguardando} solicitação(ões) aguardando separação`}
+                      className={`ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-xs font-bold ${
+                        ativo ? "bg-white text-indigo-600" : "bg-gradient-to-r from-rose-500 to-orange-400 text-white shadow shadow-rose-300"
+                      }`}
+                    >
+                      {aguardando}
+                    </span>
+                  )}
                 </button>
               );
             })}

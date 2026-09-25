@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchSolicitacoes,
   fetchSolicitacao,
@@ -10,6 +10,13 @@ import {
   abrirDocumentoSolicitacao,
 } from "../services/api";
 import { useAuth } from "../AuthContext";
+import useAutoRefresh from "../hooks/useAutoRefresh";
+
+// Intervalo da atualização automática (sem F5).
+const INTERVALO_FILA = 15000;
+const INTERVALO_CHECKLIST = 10000;
+
+const horaAgora = () => new Date().toLocaleTimeString("pt-BR");
 
 const STATUS = {
   pendente: { rotulo: "Aguardando", cor: "bg-amber-100 text-amber-800" },
@@ -35,23 +42,32 @@ export default function PickerDashboard() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
   const [abertaId, setAbertaId] = useState(null);
+  const [atualizadoEm, setAtualizadoEm] = useState(null);
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    setErro(null);
+  // silencioso = atualização automática: não pisca a tela nem mostra erro.
+  const carregar = useCallback(async (silencioso = false) => {
+    if (!silencioso) {
+      setCarregando(true);
+      setErro(null);
+    }
     try {
       const f = FILTROS.find((x) => x.id === filtro);
       setLista(await fetchSolicitacoes(f.status));
-    } catch {
-      setErro("Não foi possível carregar as solicitações.");
+      setAtualizadoEm(horaAgora());
+      if (silencioso) setErro(null);
+    } catch (e) {
+      if (!silencioso) setErro("Não foi possível carregar as solicitações.");
+      else throw e;
     } finally {
-      setCarregando(false);
+      if (!silencioso) setCarregando(false);
     }
   }, [filtro]);
 
   useEffect(() => {
     if (!abertaId) carregar();
   }, [carregar, abertaId]);
+
+  useAutoRefresh(() => carregar(true), INTERVALO_FILA, !abertaId);
 
   if (abertaId) {
     return <Checklist id={abertaId} onVoltar={() => setAbertaId(null)} />;
@@ -75,9 +91,11 @@ export default function PickerDashboard() {
               {f.rotulo}
             </button>
           ))}
-          <button onClick={carregar} className="btn-ghost">Atualizar</button>
+          <button onClick={() => carregar()} className="btn-ghost">Atualizar</button>
         </div>
       </header>
+
+      <AutoInfo hora={atualizadoEm} />
 
       {erro && <div className="mb-4 rounded-xl bg-rose-100 p-3 text-sm text-rose-800">{erro}</div>}
 
@@ -139,10 +157,18 @@ function Checklist({ id, onVoltar }) {
   const [itemOcupado, setItemOcupado] = useState(null);
   const [erro, setErro] = useState(null);
   const [aviso, setAviso] = useState(null);
+  const [atualizadoEm, setAtualizadoEm] = useState(null);
+
+  // Cada ação do usuário muda a "versão": uma atualização automática que
+  // saiu antes da ação é descartada, pra não sobrescrever o que ele acabou de fazer.
+  const versao = useRef(0);
+  const ocupadoRef = useRef(false);
+  ocupadoRef.current = !!ocupado || itemOcupado !== null;
 
   const carregar = useCallback(async () => {
     try {
       setS(await fetchSolicitacao(id));
+      setAtualizadoEm(horaAgora());
     } catch {
       setErro("Não foi possível carregar a solicitação.");
     }
@@ -152,7 +178,17 @@ function Checklist({ id, onVoltar }) {
     carregar();
   }, [carregar]);
 
+  useAutoRefresh(async () => {
+    if (ocupadoRef.current) return;
+    const v = versao.current;
+    const dados = await fetchSolicitacao(id);
+    if (v !== versao.current || ocupadoRef.current) return;
+    setS(dados);
+    setAtualizadoEm(horaAgora());
+  }, INTERVALO_CHECKLIST);
+
   async function executar(texto, fn) {
+    versao.current++;
     setErro(null);
     setAviso(null);
     setOcupado(texto);
@@ -167,6 +203,7 @@ function Checklist({ id, onVoltar }) {
   }
 
   async function alterarItem(item, payload) {
+    versao.current++;
     setErro(null);
     setItemOcupado(item.item_id);
     try {
@@ -245,6 +282,8 @@ function Checklist({ id, onVoltar }) {
           </div>
         </div>
       </div>
+
+      <AutoInfo hora={atualizadoEm} />
 
       {erro && <div className="mb-4 rounded-xl bg-rose-100 p-3 text-sm text-rose-800">{erro}</div>}
       {aviso && <div className="mb-4 rounded-xl bg-emerald-100 p-3 text-sm text-emerald-800">{aviso}</div>}
@@ -396,6 +435,20 @@ function Carregando({ titulo }) {
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-500" />
         <div className="font-bold text-slate-800">{titulo}</div>
       </div>
+    </div>
+  );
+}
+
+/** "Atualização automática · 14:32:05" — mostra que a tela está viva. */
+function AutoInfo({ hora }) {
+  if (!hora) return null;
+  return (
+    <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+      </span>
+      Atualização automática · {hora}
     </div>
   );
 }
