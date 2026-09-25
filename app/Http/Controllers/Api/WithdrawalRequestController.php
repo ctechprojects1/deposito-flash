@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Deposito;
 use App\Models\Product;
 use App\Models\WithdrawalItem;
 use App\Models\WithdrawalRequest;
@@ -12,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use RuntimeException;
 
 /**
@@ -223,7 +225,7 @@ class WithdrawalRequestController extends Controller
 
         $dados = $request->validate([
             'retirado'    => ['sometimes', 'boolean'],
-            'location_id' => ['sometimes', 'nullable', 'integer', 'exists:locations,id'],
+            'location_id' => ['sometimes', 'nullable', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())],
         ]);
 
         if (array_key_exists('location_id', $dados)) {

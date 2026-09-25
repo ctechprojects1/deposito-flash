@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class Movement extends Model
 {
+    use \App\Models\Concerns\PertenceAoDeposito;
+
     use HasFactory;
 
     protected $fillable = [

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Deposito;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -70,6 +71,7 @@ class AuthController extends Controller
             'role'        => $u->role,
             'is_admin'    => $u->isAdmin(),
             'permissions' => $u->permissoesEfetivas(),
+            'depositos'   => Deposito::whereIn('id', $u->depositosPermitidos())->orderBy('id')->get(['id', 'nome']),
         ];
     }
 }

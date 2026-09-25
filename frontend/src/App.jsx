@@ -24,26 +24,27 @@ const ABAS = [
 ];
 
 export default function App() {
-  const { user, loading, logout, hasPerm } = useAuth();
+  const { user, loading, logout, hasPerm, deposito, trocarDeposito } = useAuth();
 
   // Abas que o usuário pode ver.
   const abas = useMemo(() => (user ? ABAS.filter((a) => hasPerm(a.perm)) : []), [user]);
   const [aba, setAba] = useState(null);
 
   // Quantas solicitações aguardam separação (badge na aba + título do navegador).
-  const podeSeparar = !!user && hasPerm("separar");
+  const podeSeparar = !!user && !!deposito && hasPerm("separar");
   const [aguardando, setAguardando] = useState(0);
   const contarAguardando = async () => setAguardando((await fetchSolicitacoes("pendente")).length);
 
   useEffect(() => {
+    setAguardando(0);
     if (podeSeparar) contarAguardando().catch(() => {});
-    else setAguardando(0);
-  }, [podeSeparar]);
+  }, [podeSeparar, deposito?.id]);
   useAutoRefresh(contarAguardando, 20000, podeSeparar);
 
   useEffect(() => {
-    document.title = (aguardando > 0 ? `(${aguardando}) ` : "") + "Flash · Endereçamento de Estoque";
-  }, [aguardando]);
+    document.title =
+      (aguardando > 0 ? `(${aguardando}) ` : "") + "Flash · Endereçamento de Estoque" + (deposito ? ` · ${deposito.nome}` : "");
+  }, [aguardando, deposito]);
 
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center text-slate-400">Carregando...</div>;
@@ -67,7 +68,8 @@ export default function App() {
               <p className="text-xs font-medium text-slate-400">Flash Universo de Produtos</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <SeletorDeposito lista={user.depositos ?? []} atual={deposito} onTrocar={trocarDeposito} />
             <span className="hidden text-sm text-slate-500 sm:inline">
               Olá, <strong className="text-slate-700">{user.name}</strong>
             </span>
@@ -109,14 +111,59 @@ export default function App() {
       </header>
 
       <main className="mt-6">
-        {Ativo ? (
-          <Ativo />
+        {!deposito ? (
+          <div className="mx-auto max-w-md card-nuvem mt-10 p-8 text-center text-slate-500">
+            Nenhum CD liberado para o seu usuário. Fale com o administrador.
+          </div>
+        ) : Ativo ? (
+          // key = CD: ao trocar de CD a tela recarrega do zero com os dados do outro CD.
+          <Ativo key={deposito.id} />
         ) : (
           <div className="mx-auto max-w-md card-nuvem mt-10 p-8 text-center text-slate-500">
             Você ainda não tem permissões atribuídas. Fale com o administrador.
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+// Cor de cada CD (pela ordem), pra ficar óbvio em qual CD se está trabalhando.
+const CORES_CD = [
+  "from-sky-500 to-indigo-500 shadow-indigo-500/30",
+  "from-orange-400 to-rose-500 shadow-rose-500/30",
+  "from-emerald-400 to-teal-500 shadow-teal-500/30",
+  "from-fuchsia-500 to-purple-500 shadow-purple-500/30",
+];
+
+function SeletorDeposito({ lista, atual, onTrocar }) {
+  if (lista.length === 0) return null;
+  const cor = (d) => CORES_CD[(d.id - 1) % CORES_CD.length];
+
+  if (lista.length === 1) {
+    return (
+      <span className={`rounded-full bg-gradient-to-r px-4 py-1.5 text-sm font-bold text-white shadow-lg ${cor(lista[0])}`}>
+        CD {lista[0].nome}
+      </span>
+    );
+  }
+
+  return (
+    <div className="card-nuvem flex items-center gap-1 p-1" title="CD em que você está trabalhando">
+      {lista.map((d) => {
+        const ativo = atual?.id === d.id;
+        return (
+          <button
+            key={d.id}
+            onClick={() => !ativo && onTrocar(d.id)}
+            className={`rounded-full px-4 py-1.5 text-sm font-bold transition-all ${
+              ativo ? `bg-gradient-to-r text-white shadow-lg ${cor(d)}` : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+            }`}
+          >
+            CD {d.nome}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class InventoryCount extends Model
 {
+    use \App\Models\Concerns\PertenceAoDeposito;
+
     use HasFactory;
 
     public const STATUS_ABERTA     = 'aberta';

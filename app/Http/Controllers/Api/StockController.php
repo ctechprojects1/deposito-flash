@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Deposito;
 use App\Models\Stock;
 use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use RuntimeException;
 
 class StockController extends Controller
@@ -23,7 +25,7 @@ class StockController extends Controller
     public function entrada(Request $request): JsonResponse
     {
         $dados = $request->validate([
-            'location_id' => ['required', 'integer', 'exists:locations,id'],
+            'location_id' => ['required', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())],
             'product_id'  => ['required', 'integer', 'exists:products,id'],
             'quantidade'  => ['required', 'numeric', 'gt:0'],
         ]);
@@ -52,7 +54,7 @@ class StockController extends Controller
     public function baixa(Request $request): JsonResponse
     {
         $dados = $request->validate([
-            'location_id' => ['required', 'integer', 'exists:locations,id'],
+            'location_id' => ['required', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())],
             'product_id'  => ['required', 'integer', 'exists:products,id'],
             'quantidade'  => ['required', 'numeric', 'gt:0'],
         ]);

@@ -19,6 +19,19 @@ class Stock extends Model
         'quantidade',
     ];
 
+    /**
+     * Estoque só do CD atual (via endereço). Vale para toda consulta, inclusive
+     * $produto->stocks, zerar geral e baixas: um CD nunca vê/mexe no saldo do outro.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('deposito', function (\Illuminate\Database\Eloquent\Builder $q) {
+            if ($id = Deposito::atualId()) {
+                $q->whereIn('stocks.location_id', Location::withoutGlobalScopes()->select('id')->where('deposito_id', $id));
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [

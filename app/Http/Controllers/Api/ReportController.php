@@ -30,6 +30,7 @@ class ReportController extends Controller
                   ->orWhere('codigo_microvix', 'like', "%{$q}%")
                   ->orWhere('codigo_barras', 'like', "%{$q}%");
             })
+            ->whereHas('stocks')
             ->with(['stocks.location'])
             ->limit(50)
             ->get()

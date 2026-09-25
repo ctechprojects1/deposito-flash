@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Deposito;
 use App\Models\Movement;
 use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use RuntimeException;
 
 class MovementController extends Controller
@@ -22,8 +24,8 @@ class MovementController extends Controller
     {
         $dados = $request->validate([
             'product_id'              => ['required', 'integer', 'exists:products,id'],
-            'origin_location_id'      => ['required', 'integer', 'exists:locations,id'],
-            'destination_location_id' => ['required', 'integer', 'different:origin_location_id', 'exists:locations,id'],
+            'origin_location_id'      => ['required', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())],
+            'destination_location_id' => ['required', 'integer', 'different:origin_location_id', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())],
             'quantidade'              => ['required', 'numeric', 'gt:0'],
             'motivo'                  => ['required', 'string', 'max:255'],
         ], [

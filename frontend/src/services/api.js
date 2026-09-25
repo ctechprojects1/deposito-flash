@@ -13,6 +13,9 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // CD selecionado no topo (Goiânia, São Paulo...): o backend filtra tudo por ele.
+  const deposito = localStorage.getItem("deposito_id");
+  if (deposito) config.headers["X-Deposito"] = deposito;
   return config;
 });
 
@@ -53,6 +56,11 @@ export async function apiLogout() {
 
 export async function fetchPermissoes() {
   const { data } = await api.get("/permissoes");
+  return data.data ?? [];
+}
+
+export async function fetchDepositos() {
+  const { data } = await api.get("/depositos");
   return data.data ?? [];
 }
 

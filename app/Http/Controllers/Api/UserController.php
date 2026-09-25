@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Deposito;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,6 +15,12 @@ class UserController extends Controller
     public function permissoes(): JsonResponse
     {
         return response()->json(['data' => User::PERMISSOES]);
+    }
+
+    /** CDs cadastrados (chips de acesso no cadastro de usuário). */
+    public function depositos(): JsonResponse
+    {
+        return response()->json(['data' => Deposito::where('ativo', true)->orderBy('id')->get(['id', 'nome'])]);
     }
 
     /** GET /api/users */
@@ -32,6 +39,8 @@ class UserController extends Controller
             'password'      => ['required', 'string', 'min:6'],
             'permissions'   => ['array'],
             'permissions.*' => ['string', Rule::in(User::PERMISSOES)],
+            'depositos'     => ['array'],
+            'depositos.*'   => ['integer', 'exists:depositos,id'],
             'ativo'         => ['boolean'],
         ]);
 
@@ -42,6 +51,7 @@ class UserController extends Controller
             'role'        => in_array('admin', $dados['permissions'] ?? [], true)
                                 ? User::ROLE_ADMIN : User::ROLE_SOLICITANTE,
             'permissions' => $dados['permissions'] ?? [],
+            'depositos'   => array_map('intval', $dados['depositos'] ?? []),
             'ativo'       => $dados['ativo'] ?? true,
         ]);
 
@@ -57,12 +67,15 @@ class UserController extends Controller
             'password'      => ['nullable', 'string', 'min:6'],
             'permissions'   => ['array'],
             'permissions.*' => ['string', Rule::in(User::PERMISSOES)],
+            'depositos'     => ['array'],
+            'depositos.*'   => ['integer', 'exists:depositos,id'],
             'ativo'         => ['boolean'],
         ]);
 
         $user->name        = $dados['name'];
         $user->email       = $dados['email'];
         $user->permissions = $dados['permissions'] ?? [];
+        $user->depositos   = array_map('intval', $dados['depositos'] ?? []);
         $user->role        = in_array('admin', $dados['permissions'] ?? [], true)
                                 ? User::ROLE_ADMIN : User::ROLE_SOLICITANTE;
         if (array_key_exists('ativo', $dados)) {
@@ -97,6 +110,7 @@ class UserController extends Controller
             'is_admin'    => $u->isAdmin(),
             'ativo'       => (bool) $u->ativo,
             'permissions' => $u->permissions ?? [],
+            'depositos'   => array_map('intval', $u->depositos ?? []),
         ];
     }
 }

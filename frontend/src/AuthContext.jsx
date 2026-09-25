@@ -3,9 +3,20 @@ import { apiLogin, apiMe, apiLogout } from "./services/api";
 
 const AuthContext = createContext(null);
 
+/** Mantém o CD salvo se o usuário ainda tiver acesso; senão, o primeiro liberado. */
+function escolherDeposito(user) {
+  const lista = user?.depositos ?? [];
+  const salvo = Number(localStorage.getItem("deposito_id"));
+  const id = lista.some((d) => d.id === salvo) ? salvo : lista[0]?.id ?? null;
+  if (id) localStorage.setItem("deposito_id", String(id));
+  else localStorage.removeItem("deposito_id");
+  return id;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [depositoId, setDepositoId] = useState(null);
 
   // Ao carregar: se tiver token, busca o usuário.
   useEffect(() => {
@@ -16,7 +27,9 @@ export function AuthProvider({ children }) {
         return;
       }
       try {
-        setUser(await apiMe());
+        const u = await apiMe();
+        setDepositoId(escolherDeposito(u));
+        setUser(u);
       } catch {
         localStorage.removeItem("token");
       } finally {
@@ -36,6 +49,7 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const { token, user } = await apiLogin(email, password);
     localStorage.setItem("token", token);
+    setDepositoId(escolherDeposito(user));
     setUser(user);
   }
 
@@ -45,13 +59,20 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  function trocarDeposito(id) {
+    localStorage.setItem("deposito_id", String(id));
+    setDepositoId(id);
+  }
+
+  const deposito = user?.depositos?.find((d) => d.id === depositoId) ?? null;
+
   // Verifica permissão (admin tem tudo — já vem resolvido do backend).
   function hasPerm(p) {
     return !!user && (user.permissions || []).includes(p);
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasPerm }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, hasPerm, deposito, trocarDeposito }}>
       {children}
     </AuthContext.Provider>
   );

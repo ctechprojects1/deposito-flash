@@ -15,7 +15,19 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'auth.token' => \App\Http\Middleware\TokenAuth::class,
             'perm'       => \App\Http\Middleware\CheckPermission::class,
+            'deposito'   => \App\Http\Middleware\DepositoAtual::class,
         ]);
+
+        // Token e CD precisam estar definidos ANTES de resolver {location},
+        // {withdrawalRequest}... na rota, para o filtro por CD valer ali também.
+        $middleware->prependToPriorityList(
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \App\Http\Middleware\TokenAuth::class,
+        );
+        $middleware->prependToPriorityList(
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \App\Http\Middleware\DepositoAtual::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Location extends Model
 {
+    use \App\Models\Concerns\PertenceAoDeposito;
+
     use HasFactory;
 
     protected $fillable = [

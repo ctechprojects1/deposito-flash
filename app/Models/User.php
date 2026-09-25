@@ -36,6 +36,7 @@ class User extends Authenticatable
         'password',
         'role',
         'permissions',
+        'depositos',
         'ativo',
     ];
 
@@ -52,6 +53,7 @@ class User extends Authenticatable
             'password'          => 'hashed',
             'ativo'             => 'boolean',
             'permissions'       => 'array',
+            'depositos'         => 'array',
         ];
     }
 
@@ -71,6 +73,17 @@ class User extends Authenticatable
     public function permissoesEfetivas(): array
     {
         return $this->isAdmin() ? self::PERMISSOES : ($this->permissions ?? []);
+    }
+
+    /** Ids dos CDs que o usuário acessa (admin: todos os ativos). */
+    public function depositosPermitidos(): array
+    {
+        $ativos = Deposito::where('ativo', true)->orderBy('id')->pluck('id')->all();
+        if ($this->isAdmin()) {
+            return $ativos;
+        }
+        $meus = array_map('intval', $this->depositos ?? []);
+        return array_values(array_filter($ativos, fn ($id) => in_array($id, $meus, true)));
     }
 
     /*

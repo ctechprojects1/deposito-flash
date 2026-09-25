@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   fetchUsuarios,
   fetchPermissoes,
+  fetchDepositos,
   criarUsuario,
   atualizarUsuario,
   excluirUsuario,
@@ -22,6 +23,7 @@ const PERM_LABELS = {
 export default function UsersScreen() {
   const [usuarios, setUsuarios] = useState([]);
   const [permissoes, setPermissoes] = useState([]);
+  const [depositos, setDepositos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editando, setEditando] = useState(null); // objeto user ou {} p/ novo
   const [erro, setErro] = useState(null);
@@ -29,9 +31,10 @@ export default function UsersScreen() {
   async function carregar() {
     setLoading(true);
     try {
-      const [u, p] = await Promise.all([fetchUsuarios(), fetchPermissoes()]);
+      const [u, p, d] = await Promise.all([fetchUsuarios(), fetchPermissoes(), fetchDepositos()]);
       setUsuarios(u);
       setPermissoes(p);
+      setDepositos(d);
     } catch (e) {
       setErro("Falha ao carregar usuários.");
     } finally {
@@ -76,6 +79,21 @@ export default function UsersScreen() {
               <div className="text-sm text-slate-500">{u.email}</div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {u.is_admin ? (
+                  <span className="text-xs text-slate-400">todos os CDs</span>
+                ) : (u.depositos ?? []).length === 0 ? (
+                  <span className="text-xs font-semibold text-rose-500">nenhum CD liberado</span>
+                ) : (
+                  depositos
+                    .filter((d) => u.depositos.includes(d.id))
+                    .map((d) => (
+                      <span key={d.id} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-600">
+                        CD {d.nome}
+                      </span>
+                    ))
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {u.is_admin ? (
                   <span className="text-xs text-indigo-500">acesso total</span>
                 ) : u.permissions.length === 0 ? (
                   <span className="text-xs text-slate-400">sem permissões</span>
@@ -105,6 +123,7 @@ export default function UsersScreen() {
         <UserModal
           user={editando}
           permissoes={permissoes}
+          depositos={depositos}
           onClose={() => setEditando(null)}
           onSaved={() => {
             setEditando(null);
@@ -116,12 +135,14 @@ export default function UsersScreen() {
   );
 }
 
-function UserModal({ user, permissoes, onClose, onSaved }) {
+function UserModal({ user, permissoes, depositos, onClose, onSaved }) {
   const novo = !user.id;
   const [name, setName] = useState(user.name || "");
   const [email, setEmail] = useState(user.email || "");
   const [password, setPassword] = useState("");
   const [perms, setPerms] = useState(user.permissions || []);
+  // Novo usuário já vem com o primeiro CD (Goiânia) marcado.
+  const [cds, setCds] = useState(user.depositos ?? (depositos[0] ? [depositos[0].id] : []));
   const [ativo, setAtivo] = useState(user.ativo ?? true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState(null);
@@ -134,10 +155,11 @@ function UserModal({ user, permissoes, onClose, onSaved }) {
     setErro(null);
     if (!name.trim() || !email.trim()) return setErro("Preencha nome e e-mail.");
     if (novo && password.length < 6) return setErro("Senha de no mínimo 6 caracteres.");
+    if (!perms.includes("admin") && cds.length === 0) return setErro("Libere pelo menos um CD para o usuário.");
 
     setSalvando(true);
     try {
-      const payload = { name: name.trim(), email: email.trim(), permissions: perms, ativo };
+      const payload = { name: name.trim(), email: email.trim(), permissions: perms, depositos: cds, ativo };
       if (password) payload.password = password;
       if (novo) await criarUsuario(payload);
       else await atualizarUsuario(user.id, payload);
@@ -176,6 +198,33 @@ function UserModal({ user, permissoes, onClose, onSaved }) {
               Senha {novo ? "" : <span className="font-normal text-slate-400">(deixe em branco p/ manter)</span>}
             </label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input-nuvem" placeholder="••••••••" />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">CDs liberados</label>
+            <div className="flex flex-wrap gap-2">
+              {depositos.map((d) => {
+                const on = perms.includes("admin") || cds.includes(d.id);
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    disabled={perms.includes("admin")}
+                    onClick={() => setCds((s) => (s.includes(d.id) ? s.filter((x) => x !== d.id) : [...s, d.id]))}
+                    className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition disabled:cursor-default ${
+                      on
+                        ? "bg-gradient-to-r from-orange-400 to-rose-500 text-white shadow-md shadow-rose-500/30"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    CD {d.nome}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              {perms.includes("admin") ? "Administrador acessa todos os CDs." : "O usuário só vê e mexe nos CDs marcados. As permissões abaixo valem para eles."}
+            </p>
           </div>
 
           <div>
