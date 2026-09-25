@@ -50,4 +50,12 @@ return [
         'timeout'   => (int) env('MICROVIX_API_TIMEOUT', 15),
     ],
 
+    /*
+    | Leitura de notas/pedidos em PDF (Claude). Mesma chave usada no PRODID.
+    */
+    'anthropic' => [
+        'key'   => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-5'),
+    ],
+
 ];

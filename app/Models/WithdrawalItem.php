@@ -16,16 +16,24 @@ class WithdrawalItem extends Model
     protected $fillable = [
         'withdrawal_request_id',
         'product_id',
+        'codigo_microvix',
+        'descricao',
+        'quantidade_documento',
         'location_id',
         'quantidade_solicitada',
         'quantidade_separada',
+        'retirado',
+        'retirado_em',
     ];
 
     protected function casts(): array
     {
         return [
+            'quantidade_documento'  => 'decimal:2',
             'quantidade_solicitada' => 'decimal:2',
             'quantidade_separada'   => 'decimal:2',
+            'retirado'              => 'boolean',
+            'retirado_em'           => 'datetime',
         ];
     }
 

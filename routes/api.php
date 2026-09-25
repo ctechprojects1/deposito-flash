@@ -74,11 +74,23 @@ Route::middleware('auth.token')->group(function () {
     });
 
     // Solicitações de retirada
+    // Solicitante: lê a nota/pedido e envia os itens marcados
+    Route::post('/withdrawal-requests/extrair', [WithdrawalRequestController::class, 'extrair'])->middleware('perm:solicitar');
     Route::post('/withdrawal-requests', [WithdrawalRequestController::class, 'store'])->middleware('perm:solicitar');
-    Route::get('/withdrawal-requests', [WithdrawalRequestController::class, 'index'])->middleware('perm:separar');
-    Route::get('/withdrawal-requests/{withdrawalRequest}', [WithdrawalRequestController::class, 'show'])->middleware('perm:separar');
-    Route::post('/withdrawal-requests/{withdrawalRequest}/iniciar', [WithdrawalRequestController::class, 'iniciar'])->middleware('perm:separar');
-    Route::post('/withdrawal-requests/{withdrawalRequest}/confirmar', [WithdrawalRequestController::class, 'confirmar'])->middleware('perm:separar');
+
+    // Separador: fila e checklist
+    Route::middleware('perm:separar')->group(function () {
+        Route::get('/withdrawal-requests', [WithdrawalRequestController::class, 'index']);
+        Route::get('/withdrawal-requests/{withdrawalRequest}', [WithdrawalRequestController::class, 'show']);
+        Route::get('/withdrawal-requests/{withdrawalRequest}/documento', [WithdrawalRequestController::class, 'documento']);
+        Route::post('/withdrawal-requests/{withdrawalRequest}/iniciar', [WithdrawalRequestController::class, 'iniciar']);
+        Route::post('/withdrawal-requests/{withdrawalRequest}/pausar', [WithdrawalRequestController::class, 'pausar']);
+        Route::put('/withdrawal-requests/{withdrawalRequest}/itens/{item}', [WithdrawalRequestController::class, 'atualizarItem']);
+        Route::post('/withdrawal-requests/{withdrawalRequest}/finalizar', [WithdrawalRequestController::class, 'finalizar']);
+    });
+
+    // Admin: reabrir separação finalizada (com estorno do estoque)
+    Route::post('/withdrawal-requests/{withdrawalRequest}/reabrir', [WithdrawalRequestController::class, 'reabrir'])->middleware('perm:admin');
 
     // Administração de usuários (só admin)
     Route::middleware('perm:admin')->group(function () {

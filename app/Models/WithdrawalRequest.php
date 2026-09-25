@@ -16,6 +16,7 @@ class WithdrawalRequest extends Model
 
     public const STATUS_PENDENTE     = 'pendente';
     public const STATUS_EM_SEPARACAO = 'em_separacao';
+    public const STATUS_PAUSADA      = 'pausada';
     public const STATUS_CONCLUIDA    = 'concluida';
     public const STATUS_CANCELADA    = 'cancelada';
 
@@ -23,10 +24,31 @@ class WithdrawalRequest extends Model
         'solicitante_id',
         'separador_id',
         'destino',
+        'tipo_documento',
+        'numero_documento',
         'anexo_nota_path',
         'status',
         'observacao',
+        'iniciada_em',
+        'finalizada_em',
+        'reaberta_em',
+        'reaberta_por_id',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'iniciada_em'   => 'datetime',
+            'finalizada_em' => 'datetime',
+            'reaberta_em'   => 'datetime',
+        ];
+    }
+
+    /** Admin que reabriu a separação (quando houver). */
+    public function reabertaPor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reaberta_por_id');
+    }
 
     /*
     |--------------------------------------------------------------------------

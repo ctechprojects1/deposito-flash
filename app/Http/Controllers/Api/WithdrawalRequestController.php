@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Stock;
+use App\Models\Product;
+use App\Models\WithdrawalItem;
 use App\Models\WithdrawalRequest;
+use App\Services\NotaExtractorService;
 use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,263 +14,420 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
+/**
+ * Solicitação de retirada a partir de nota/pedido + separação por checklist.
+ *
+ * Status: pendente -> em_separacao <-> pausada -> concluida
+ * A baixa no estoque acontece ao FINALIZAR. Só admin reabre (com estorno).
+ */
 class WithdrawalRequestController extends Controller
 {
+    private const REGRA_PDF = ['required', 'file', 'max:10240', 'mimes:pdf', 'mimetypes:application/pdf'];
+
+    /* ======================================================================
+     |  Solicitante
+     ====================================================================== */
+
     /**
-     * Cria uma solicitação de retirada com seus itens e o anexo da Nota de Saída.
-     *
-     * POST /api/withdrawal-requests   (multipart/form-data — por causa do arquivo)
+     * Lê o PDF da nota/pedido e devolve os itens cruzados com o depósito.
+     * POST /api/withdrawal-requests/extrair  (multipart: documento)
+     */
+    public function extrair(Request $request, NotaExtractorService $extrator): JsonResponse
+    {
+        $request->validate(['documento' => self::REGRA_PDF], [
+            'documento.mimes' => 'Envie a nota ou o pedido em PDF.',
+            'documento.max'   => 'O PDF não pode passar de 10 MB.',
+        ]);
+
+        $pdf = base64_encode(file_get_contents($request->file('documento')->getRealPath()));
+        $lido = $extrator->extrair($pdf);
+
+        if ($lido['erro']) {
+            return response()->json(['message' => $lido['erro']], 422);
+        }
+
+        $itens = array_map(fn ($it) => $this->cruzarComDeposito($it), $lido['itens']);
+
+        return response()->json([
+            'data' => [
+                'tipo'    => $lido['tipo'],
+                'numero'  => $lido['numero'],
+                'destino' => $lido['destino'],
+                'itens'   => $itens,
+            ],
+        ]);
+    }
+
+    /**
+     * Cria a solicitação só com os itens marcados no checklist.
+     * POST /api/withdrawal-requests  (multipart: anexo_nota + campos + itens[])
      */
     public function store(Request $request): JsonResponse
     {
         $dados = $request->validate([
-            'solicitante_id' => ['required', 'integer', 'exists:users,id'],
-            'destino'        => ['required', 'string', 'max:255'],
-            'observacao'     => ['nullable', 'string'],
+            'destino'          => ['required', 'string', 'max:255'],
+            'observacao'       => ['nullable', 'string'],
+            'tipo_documento'   => ['nullable', 'string', 'max:30'],
+            'numero_documento' => ['nullable', 'string', 'max:100'],
 
-            // Itens da solicitação.
-            'itens'                           => ['required', 'array', 'min:1'],
-            'itens.*.product_id'              => ['required', 'integer', 'exists:products,id'],
-            'itens.*.location_id'             => ['nullable', 'integer', 'exists:locations,id'],
-            'itens.*.quantidade_solicitada'   => ['required', 'numeric', 'gt:0'],
+            'itens'                         => ['required', 'array', 'min:1'],
+            'itens.*.product_id'            => ['required', 'integer', 'exists:products,id'],
+            'itens.*.codigo_microvix'       => ['nullable', 'string', 'max:60'],
+            'itens.*.descricao'             => ['nullable', 'string', 'max:255'],
+            'itens.*.quantidade_documento'  => ['nullable', 'numeric', 'min:0'],
+            'itens.*.quantidade_solicitada' => ['required', 'numeric', 'gt:0'],
 
-            // Anexo da Nota de Saída: obrigatório, PDF ou imagem, até 5 MB.
-            'anexo_nota' => [
-                'required',
-                'file',
-                'max:5120', // 5 MB em KB
-                // 'mimes' checa a extensão; 'mimetypes' checa o conteúdo real do arquivo.
-                'mimes:pdf,jpg,jpeg,png,webp',
-                'mimetypes:application/pdf,image/jpeg,image/png,image/webp',
-            ],
+            'anexo_nota' => self::REGRA_PDF,
         ], [
-            'anexo_nota.mimes'     => 'A nota deve ser um PDF ou imagem (jpg, jpeg, png, webp).',
-            'anexo_nota.mimetypes' => 'O conteúdo do arquivo não corresponde a um PDF/imagem válido.',
-            'anexo_nota.max'       => 'A nota não pode exceder 5 MB.',
+            'itens.required'  => 'Marque pelo menos um item para retirar do depósito.',
+            'anexo_nota.mimes' => 'O documento deve ser um PDF.',
         ]);
 
-        // Camada extra de segurança: valida a imagem de verdade (evita arquivo
-        // renomeado com extensão de imagem). PDFs não passam por isso.
-        $arquivo = $request->file('anexo_nota');
-        if (str_starts_with($arquivo->getMimeType(), 'image/') && @getimagesize($arquivo->getRealPath()) === false) {
-            return response()->json([
-                'message' => 'O arquivo de imagem enviado está corrompido ou é inválido.',
-            ], 422);
-        }
-
-        // Persiste solicitação + itens de forma atômica; se algo falhar,
-        // ainda removemos o arquivo já gravado para não deixar lixo.
-        $caminhoAnexo = null;
+        $caminho = null;
 
         try {
-            $solicitacao = DB::transaction(function () use ($dados, $arquivo, &$caminhoAnexo) {
-                // Salva em storage/app/public/notas (acessível via `php artisan storage:link`).
-                $caminhoAnexo = $arquivo->store('notas', 'public');
+            $solicitacao = DB::transaction(function () use ($dados, $request, &$caminho) {
+                $caminho = $request->file('anexo_nota')->store('notas', 'public');
 
-                $solicitacao = WithdrawalRequest::create([
-                    'solicitante_id'  => $dados['solicitante_id'],
-                    'destino'         => $dados['destino'],
-                    'observacao'      => $dados['observacao'] ?? null,
-                    'anexo_nota_path' => $caminhoAnexo,
-                    'status'          => WithdrawalRequest::STATUS_PENDENTE,
+                $s = WithdrawalRequest::create([
+                    'solicitante_id'   => $request->user()->id,
+                    'destino'          => $dados['destino'],
+                    'observacao'       => $dados['observacao'] ?? null,
+                    'tipo_documento'   => $dados['tipo_documento'] ?? null,
+                    'numero_documento' => $dados['numero_documento'] ?? null,
+                    'anexo_nota_path'  => $caminho,
+                    'status'           => WithdrawalRequest::STATUS_PENDENTE,
                 ]);
 
-                foreach ($dados['itens'] as $item) {
-                    $solicitacao->items()->create([
-                        'product_id'            => $item['product_id'],
-                        'location_id'           => $item['location_id'] ?? null,
-                        'quantidade_solicitada' => $item['quantidade_solicitada'],
+                foreach ($dados['itens'] as $it) {
+                    $qtd = (float) $it['quantidade_solicitada'];
+                    $s->items()->create([
+                        'product_id'            => $it['product_id'],
+                        'codigo_microvix'       => $it['codigo_microvix'] ?? null,
+                        'descricao'             => $it['descricao'] ?? null,
+                        'quantidade_documento'  => $it['quantidade_documento'] ?? 0,
+                        'quantidade_solicitada' => $qtd,
                         'quantidade_separada'   => 0,
+                        'location_id'           => $this->enderecoSugerido((int) $it['product_id'], $qtd),
                     ]);
                 }
 
-                return $solicitacao;
+                return $s;
             });
         } catch (\Throwable $e) {
-            // Rollback do arquivo caso a transação tenha falhado após o upload.
-            if ($caminhoAnexo && Storage::disk('public')->exists($caminhoAnexo)) {
-                Storage::disk('public')->delete($caminhoAnexo);
+            if ($caminho && Storage::disk('public')->exists($caminho)) {
+                Storage::disk('public')->delete($caminho);
             }
-
             report($e);
 
-            return response()->json([
-                'message' => 'Não foi possível registrar a solicitação. Tente novamente.',
-            ], 500);
+            return response()->json(['message' => 'Não foi possível registrar a solicitação. Tente novamente.'], 500);
         }
 
         return response()->json([
-            'message' => 'Solicitação registrada com sucesso.',
-            'data'    => $this->transformar($solicitacao),
+            'message' => 'Solicitação enviada para separação.',
+            'data'    => $this->detalhe($solicitacao),
         ], 201);
     }
 
+    /* ======================================================================
+     |  Separador
+     ====================================================================== */
+
     /**
-     * Lista as solicitações — por padrão, as pendentes (fila do separador).
-     *
-     * GET /api/withdrawal-requests?status=pendente
+     * Fila de separação. ?status=pendente,pausada (vírgula) ou "todas".
+     * GET /api/withdrawal-requests
      */
     public function index(Request $request): JsonResponse
     {
-        $status = $request->query('status', WithdrawalRequest::STATUS_PENDENTE);
+        $status = (string) $request->query('status', 'pendente,em_separacao,pausada');
 
-        $solicitacoes = WithdrawalRequest::query()
-            ->when($status !== 'todas', fn ($q) => $q->where('status', $status))
-            ->with(['items.product.stocks.location', 'items.location', 'solicitante', 'separador'])
+        $lista = WithdrawalRequest::query()
+            ->when($status !== 'todas', fn ($q) => $q->whereIn('status', explode(',', $status)))
+            ->withCount([
+                'items',
+                'items as itens_retirados' => fn ($q) => $q->where('retirado', true),
+            ])
+            ->with(['solicitante', 'separador'])
             ->latest()
+            ->limit(200)
             ->get()
-            ->map(fn ($s) => $this->transformar($s));
+            ->map(fn ($s) => $this->resumo($s));
 
-        return response()->json(['data' => $solicitacoes]);
+        return response()->json(['data' => $lista]);
     }
 
-    /**
-     * Detalha uma solicitação.
-     *
-     * GET /api/withdrawal-requests/{withdrawalRequest}
-     */
+    /** GET /api/withdrawal-requests/{withdrawalRequest} */
     public function show(WithdrawalRequest $withdrawalRequest): JsonResponse
     {
-        return response()->json([
-            'data' => $this->transformar($withdrawalRequest),
-        ]);
+        return response()->json(['data' => $this->detalhe($withdrawalRequest)]);
     }
 
     /**
-     * O separador inicia a separação: assume a solicitação e muda o status.
-     *
-     * POST /api/withdrawal-requests/{withdrawalRequest}/iniciar
+     * PDF anexado. Servido pela API (com token) porque no HostGator não há
+     * o link public/storage. GET .../{id}/documento
      */
+    public function documento(WithdrawalRequest $withdrawalRequest)
+    {
+        $path = $withdrawalRequest->anexo_nota_path;
+        if (! $path || ! Storage::disk('public')->exists($path)) {
+            return response()->json(['message' => 'Documento não encontrado.'], 404);
+        }
+
+        return Storage::disk('public')->response($path, "solicitacao-{$withdrawalRequest->id}.pdf", [
+            'Content-Type' => 'application/pdf',
+        ], 'inline');
+    }
+
+    /** Inicia ou retoma. POST .../{id}/iniciar */
     public function iniciar(Request $request, WithdrawalRequest $withdrawalRequest): JsonResponse
     {
-        // Em produção o separador vem do usuário autenticado (auth()->id()).
-        $dados = $request->validate([
-            'separador_id' => ['required', 'integer', 'exists:users,id'],
-        ]);
-
-        if ($withdrawalRequest->status !== WithdrawalRequest::STATUS_PENDENTE) {
-            return response()->json([
-                'message' => 'Esta solicitação não está mais pendente.',
-            ], 409);
+        $s = $withdrawalRequest;
+        if (! in_array($s->status, [WithdrawalRequest::STATUS_PENDENTE, WithdrawalRequest::STATUS_PAUSADA], true)) {
+            return response()->json(['message' => 'Esta separação não pode ser iniciada agora.'], 409);
         }
 
-        $withdrawalRequest->update([
-            'separador_id' => $dados['separador_id'],
+        $s->update([
             'status'       => WithdrawalRequest::STATUS_EM_SEPARACAO,
+            'separador_id' => $request->user()->id,
+            'iniciada_em'  => $s->iniciada_em ?? now(),
         ]);
 
-        return response()->json([
-            'message' => 'Separação iniciada.',
-            'data'    => $this->transformar($withdrawalRequest->fresh()),
-        ]);
+        return response()->json(['message' => 'Separação em andamento.', 'data' => $this->detalhe($s->fresh())]);
+    }
+
+    /** POST .../{id}/pausar */
+    public function pausar(WithdrawalRequest $withdrawalRequest): JsonResponse
+    {
+        $s = $withdrawalRequest;
+        if ($s->status !== WithdrawalRequest::STATUS_EM_SEPARACAO) {
+            return response()->json(['message' => 'Só dá para pausar uma separação em andamento.'], 409);
+        }
+
+        $s->update(['status' => WithdrawalRequest::STATUS_PAUSADA]);
+
+        return response()->json(['message' => 'Separação pausada.', 'data' => $this->detalhe($s->fresh())]);
     }
 
     /**
-     * Confirma a retirada: dá baixa no estoque de cada item e conclui.
-     *
-     * POST /api/withdrawal-requests/{withdrawalRequest}/confirmar
-     *
-     * Para cada item, usa o local informado ou escolhe automaticamente um
-     * endereço com estoque suficiente. Se algum item não tiver estoque,
-     * nada é baixado (transação atômica) e o erro é reportado.
+     * Marca/desmarca um item como retirado e/ou troca o endereço de retirada.
+     * PUT .../{id}/itens/{item}  { retirado?, location_id? }
      */
-    public function confirmar(WithdrawalRequest $withdrawalRequest, StockService $stockService): JsonResponse
+    public function atualizarItem(Request $request, WithdrawalRequest $withdrawalRequest, WithdrawalItem $item): JsonResponse
     {
-        if ($withdrawalRequest->status === WithdrawalRequest::STATUS_CONCLUIDA) {
-            return response()->json(['message' => 'Solicitação já concluída.'], 409);
+        if ($item->withdrawal_request_id !== $withdrawalRequest->id) {
+            return response()->json(['message' => 'Item não pertence a esta solicitação.'], 404);
         }
-        if ($withdrawalRequest->status === WithdrawalRequest::STATUS_CANCELADA) {
-            return response()->json(['message' => 'Solicitação cancelada não pode ser separada.'], 409);
+        if ($withdrawalRequest->status !== WithdrawalRequest::STATUS_EM_SEPARACAO) {
+            return response()->json(['message' => 'Inicie ou retome a separação para marcar os itens.'], 409);
         }
 
-        $withdrawalRequest->load('items');
+        $dados = $request->validate([
+            'retirado'    => ['sometimes', 'boolean'],
+            'location_id' => ['sometimes', 'nullable', 'integer', 'exists:locations,id'],
+        ]);
+
+        if (array_key_exists('location_id', $dados)) {
+            $item->location_id = $dados['location_id'];
+        }
+        if (array_key_exists('retirado', $dados)) {
+            $item->retirado = $dados['retirado'];
+            $item->retirado_em = $dados['retirado'] ? now() : null;
+        }
+        $item->save();
+
+        return response()->json(['data' => $this->detalhe($withdrawalRequest->fresh())]);
+    }
+
+    /**
+     * Finaliza: todos os itens marcados -> baixa no estoque (tudo ou nada).
+     * POST .../{id}/finalizar
+     */
+    public function finalizar(WithdrawalRequest $withdrawalRequest, StockService $stock): JsonResponse
+    {
+        $s = $withdrawalRequest->load('items.product', 'items.location');
+
+        if ($s->status !== WithdrawalRequest::STATUS_EM_SEPARACAO) {
+            return response()->json(['message' => 'Só dá para finalizar uma separação em andamento.'], 409);
+        }
+
+        $faltando = $s->items->where('retirado', false)->count();
+        if ($faltando > 0) {
+            return response()->json(['message' => "Ainda há {$faltando} item(ns) sem check de retirado."], 422);
+        }
+        if ($semEndereco = $s->items->firstWhere('location_id', null)) {
+            return response()->json(['message' => "Defina o endereço de retirada de: {$semEndereco->product?->nome}."], 422);
+        }
 
         try {
-            DB::transaction(function () use ($withdrawalRequest, $stockService) {
-                foreach ($withdrawalRequest->items as $item) {
-                    $quantidade = (float) $item->quantidade_solicitada;
-
-                    // Local a retirar: o já definido, ou o de maior estoque com saldo suficiente.
-                    $locationId = $item->location_id ?? $this->melhorLocalPara($item->product_id, $quantidade);
-
-                    if (! $locationId) {
-                        throw new RuntimeException(
-                            "Sem estoque suficiente para o produto #{$item->product_id}."
-                        );
+            DB::transaction(function () use ($s, $stock) {
+                foreach ($s->items as $item) {
+                    $qtd = (float) $item->quantidade_solicitada;
+                    try {
+                        $stock->baixa($item->location_id, $item->product_id, $qtd);
+                    } catch (RuntimeException $e) {
+                        throw new RuntimeException("{$item->product?->nome} em {$item->location?->nome}: {$e->getMessage()}");
                     }
-
-                    $stockService->baixa($locationId, $item->product_id, $quantidade);
-
-                    $item->update([
-                        'location_id'         => $locationId,
-                        'quantidade_separada' => $quantidade,
-                    ]);
+                    $item->update(['quantidade_separada' => $qtd]);
                 }
 
-                $withdrawalRequest->update(['status' => WithdrawalRequest::STATUS_CONCLUIDA]);
+                $s->update([
+                    'status'        => WithdrawalRequest::STATUS_CONCLUIDA,
+                    'finalizada_em' => now(),
+                ]);
             });
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
         return response()->json([
-            'message' => 'Retirada confirmada e baixa realizada no estoque.',
-            'data'    => $this->transformar($withdrawalRequest->fresh(['items.product', 'items.location'])),
+            'message' => 'Separação finalizada e estoque baixado.',
+            'data'    => $this->detalhe($s->fresh()),
         ]);
     }
 
     /**
-     * Retorna o endereço com maior saldo que comporte a quantidade pedida.
+     * Admin reabre uma separação finalizada: devolve o estoque (estorno).
+     * POST .../{id}/reabrir   (perm admin)
      */
-    private function melhorLocalPara(int $productId, float $quantidade): ?int
+    public function reabrir(Request $request, WithdrawalRequest $withdrawalRequest, StockService $stock): JsonResponse
     {
-        return Stock::query()
-            ->where('product_id', $productId)
-            ->where('quantidade', '>=', $quantidade)
-            ->orderByDesc('quantidade')
-            ->value('location_id');
+        $s = $withdrawalRequest->load('items');
+
+        if ($s->status !== WithdrawalRequest::STATUS_CONCLUIDA) {
+            return response()->json(['message' => 'Só dá para reabrir uma separação finalizada.'], 409);
+        }
+
+        DB::transaction(function () use ($s, $stock, $request) {
+            foreach ($s->items as $item) {
+                $qtd = (float) $item->quantidade_separada;
+                if ($qtd > 0 && $item->location_id) {
+                    $stock->entrada($item->location_id, $item->product_id, $qtd);
+                }
+                $item->update(['quantidade_separada' => 0]);
+            }
+
+            $s->update([
+                'status'          => WithdrawalRequest::STATUS_EM_SEPARACAO,
+                'finalizada_em'   => null,
+                'reaberta_em'     => now(),
+                'reaberta_por_id' => $request->user()->id,
+            ]);
+        });
+
+        return response()->json([
+            'message' => 'Separação reaberta e estoque devolvido. Finalize de novo quando terminar.',
+            'data'    => $this->detalhe($s->fresh()),
+        ]);
     }
 
-    /**
-     * Serializa uma solicitação para a resposta da API, incluindo, por item,
-     * os locais onde o produto tem estoque (para o separador saber aonde ir).
-     */
-    private function transformar(WithdrawalRequest $s): array
+    /* ======================================================================
+     |  Apoio
+     ====================================================================== */
+
+    /** Cruza um item lido do documento com o cadastro/estoque do depósito. */
+    private function cruzarComDeposito(array $it): array
     {
-        $s->loadMissing(['items.product.stocks.location', 'items.location', 'solicitante', 'separador']);
+        $cod = $it['codigo'];
+        $product = Product::where('codigo_microvix', $cod)->first()
+            ?? (ltrim($cod, '0') !== $cod ? Product::where('codigo_microvix', ltrim($cod, '0'))->first() : null);
+
+        $locais = $product ? $this->locaisComSaldo($product) : [];
 
         return [
-            'id'          => $s->id,
-            'status'      => $s->status,
-            'destino'     => $s->destino,
-            'observacao'  => $s->observacao,
-            'anexo_url'   => $s->anexo_nota_path ? Storage::disk('public')->url($s->anexo_nota_path) : null,
-            'solicitante' => $s->solicitante?->name,
-            'separador'   => $s->separador?->name,
-            'criada_em'   => $s->created_at?->toDateTimeString(),
-            'itens'       => $s->items->map(function ($i) {
-                // Locais com estoque para este produto (sugestão de coleta).
-                $locais = ($i->product?->stocks ?? collect())
-                    ->where('quantidade', '>', 0)
-                    ->sortByDesc('quantidade')
-                    ->map(fn ($st) => [
-                        'location_id' => $st->location_id,
-                        'nome'        => $st->location?->nome,
-                        'quantidade'  => (float) $st->quantidade,
-                    ])->values();
-
-                return [
-                    'item_id'               => $i->id,
-                    'product_id'            => $i->product_id,
-                    'produto'               => $i->product?->nome,
-                    'codigo_microvix'       => $i->product?->codigo_microvix,
-                    'quantidade_solicitada' => (float) $i->quantidade_solicitada,
-                    'quantidade_separada'   => (float) $i->quantidade_separada,
-                    'location_id'           => $i->location_id,
-                    'local_definido'        => $i->location?->nome,
-                    'locais_disponiveis'    => $locais,
-                ];
-            })->values(),
+            'codigo'           => $cod,
+            'descricao'        => $it['descricao'],
+            'quantidade'       => $it['quantidade'],
+            'no_deposito'      => (bool) $product,
+            'product_id'       => $product?->id,
+            'nome_deposito'    => $product?->nome,
+            'estoque_total'    => array_sum(array_column($locais, 'quantidade')),
+            'locais'           => $locais,
         ];
+    }
+
+    private function locaisComSaldo(Product $product): array
+    {
+        $product->loadMissing('stocks.location');
+
+        return $product->stocks
+            ->where('quantidade', '>', 0)
+            ->sortByDesc('quantidade')
+            ->map(fn ($st) => [
+                'location_id' => $st->location_id,
+                'nome'        => $st->location?->nome,
+                'quantidade'  => (float) $st->quantidade,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /** Endereço com mais saldo que comporte a quantidade (ou o de mais saldo). */
+    private function enderecoSugerido(int $productId, float $qtd): ?int
+    {
+        $locais = $this->locaisComSaldo(Product::findOrFail($productId));
+        foreach ($locais as $l) {
+            if ($l['quantidade'] >= $qtd) {
+                return $l['location_id'];
+            }
+        }
+
+        return $locais[0]['location_id'] ?? null;
+    }
+
+    private function resumo(WithdrawalRequest $s): array
+    {
+        return [
+            'id'               => $s->id,
+            'status'           => $s->status,
+            'destino'          => $s->destino,
+            'tipo_documento'   => $s->tipo_documento,
+            'numero_documento' => $s->numero_documento,
+            'solicitante'      => $s->solicitante?->name,
+            'separador'        => $s->separador?->name,
+            'total_itens'      => (int) ($s->items_count ?? 0),
+            'itens_retirados'  => (int) ($s->itens_retirados ?? 0),
+            'criada_em'        => $s->created_at?->format('d/m/Y H:i'),
+            'finalizada_em'    => $s->finalizada_em?->format('d/m/Y H:i'),
+        ];
+    }
+
+    private function detalhe(WithdrawalRequest $s): array
+    {
+        $s->load(['items.product.stocks.location', 'items.location', 'solicitante', 'separador', 'reabertaPor']);
+
+        $itens = $s->items->map(function (WithdrawalItem $i) {
+            $locais = $i->product ? $this->locaisComSaldo($i->product) : [];
+
+            // O endereço escolhido aparece na lista mesmo se ficou sem saldo.
+            if ($i->location_id && ! collect($locais)->contains('location_id', $i->location_id)) {
+                $locais[] = ['location_id' => $i->location_id, 'nome' => $i->location?->nome, 'quantidade' => 0];
+            }
+
+            return [
+                'item_id'               => $i->id,
+                'product_id'            => $i->product_id,
+                'produto'               => $i->product?->nome,
+                'codigo_microvix'       => $i->codigo_microvix ?: $i->product?->codigo_microvix,
+                'descricao_documento'   => $i->descricao,
+                'quantidade_documento'  => (float) $i->quantidade_documento,
+                'quantidade_solicitada' => (float) $i->quantidade_solicitada,
+                'quantidade_separada'   => (float) $i->quantidade_separada,
+                'location_id'           => $i->location_id,
+                'endereco'              => $i->location?->nome,
+                'locais'                => $locais,
+                'retirado'              => (bool) $i->retirado,
+            ];
+        })->values();
+
+        return array_merge($this->resumo($s), [
+            'observacao'      => $s->observacao,
+            'tem_documento'   => (bool) $s->anexo_nota_path,
+            'iniciada_em'     => $s->iniciada_em?->format('d/m/Y H:i'),
+            'reaberta_em'     => $s->reaberta_em?->format('d/m/Y H:i'),
+            'reaberta_por'    => $s->reabertaPor?->name,
+            'total_itens'     => $itens->count(),
+            'itens_retirados' => $itens->where('retirado', true)->count(),
+            'itens'           => $itens,
+        ]);
     }
 }

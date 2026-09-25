@@ -176,28 +176,35 @@ export async function relatorioProdutoLocalizacao(q) {
   return data.data ?? [];
 }
 
-/**
- * Valida um código no Microvix e traz o nome + product_id local.
- */
-export async function validarProduto(codigo) {
-  const { data } = await api.get("/products/validar-microvix", {
-    params: { codigo },
+/* ===================== Solicitação / Separação ===================== */
+
+/** Lê a nota/pedido em PDF e devolve os itens cruzados com o depósito. */
+export async function extrairDocumento(arquivo) {
+  const form = new FormData();
+  form.append("documento", arquivo);
+  const { data } = await api.post("/withdrawal-requests/extrair", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 300000, // leitura do PDF pode levar até alguns minutos
   });
-  return data.data;
+  return data.data; // { tipo, numero, destino, itens: [...] }
 }
 
 /**
- * Cria uma solicitação de retirada (multipart, por causa do anexo).
- * `payload` = { solicitante_id, destino, observacao?, itens: [...], anexo_nota: File }
+ * Envia a solicitação com os itens marcados no checklist.
+ * payload = { destino, observacao?, tipo_documento?, numero_documento?, itens: [...], anexo_nota: File }
  */
 export async function criarSolicitacao(payload) {
   const form = new FormData();
-  form.append("solicitante_id", payload.solicitante_id);
   form.append("destino", payload.destino);
   if (payload.observacao) form.append("observacao", payload.observacao);
-  payload.itens.forEach((item, i) => {
-    form.append(`itens[${i}][product_id]`, item.product_id);
-    form.append(`itens[${i}][quantidade_solicitada]`, item.quantidade_solicitada);
+  if (payload.tipo_documento) form.append("tipo_documento", payload.tipo_documento);
+  if (payload.numero_documento) form.append("numero_documento", payload.numero_documento);
+  payload.itens.forEach((it, i) => {
+    form.append(`itens[${i}][product_id]`, it.product_id);
+    form.append(`itens[${i}][codigo_microvix]`, it.codigo_microvix ?? "");
+    form.append(`itens[${i}][descricao]`, it.descricao ?? "");
+    form.append(`itens[${i}][quantidade_documento]`, it.quantidade_documento ?? 0);
+    form.append(`itens[${i}][quantidade_solicitada]`, it.quantidade_solicitada);
   });
   form.append("anexo_nota", payload.anexo_nota);
 
@@ -207,30 +214,58 @@ export async function criarSolicitacao(payload) {
   return data;
 }
 
-/**
- * Lista solicitações por status (fila do separador).
- */
-export async function fetchSolicitacoes(status = "pendente") {
-  const { data } = await api.get("/withdrawal-requests", { params: { status } });
+/** Fila de separação. status = "pendente,pausada" | "concluida" | "todas" */
+export async function fetchSolicitacoes(status) {
+  const { data } = await api.get("/withdrawal-requests", { params: status ? { status } : {} });
   return data.data ?? [];
 }
 
-/**
- * Separador assume a solicitação.
- */
-export async function iniciarSeparacao(id, separadorId) {
-  const { data } = await api.post(`/withdrawal-requests/${id}/iniciar`, {
-    separador_id: separadorId,
-  });
+export async function fetchSolicitacao(id) {
+  const { data } = await api.get(`/withdrawal-requests/${id}`);
   return data.data;
 }
 
-/**
- * Confirma a retirada → dispara a baixa no estoque.
- */
-export async function confirmarRetirada(id) {
-  const { data } = await api.post(`/withdrawal-requests/${id}/confirmar`);
+/** Abre o PDF anexado numa nova aba (baixado com o token). */
+export async function abrirDocumentoSolicitacao(id) {
+  const aba = window.open("", "_blank");
+  try {
+    const { data } = await api.get(`/withdrawal-requests/${id}/documento`, { responseType: "blob" });
+    const url = URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+    if (aba) aba.location.href = url;
+    else window.location.href = url;
+  } catch (e) {
+    aba?.close();
+    throw e;
+  }
+}
+
+/** Inicia ou retoma a separação (o separador é o usuário logado). */
+export async function iniciarSeparacao(id) {
+  const { data } = await api.post(`/withdrawal-requests/${id}/iniciar`);
   return data.data;
+}
+
+export async function pausarSeparacao(id) {
+  const { data } = await api.post(`/withdrawal-requests/${id}/pausar`);
+  return data.data;
+}
+
+/** Marca/desmarca o item ou troca o endereço. payload = { retirado?, location_id? } */
+export async function atualizarItemSeparacao(id, itemId, payload) {
+  const { data } = await api.put(`/withdrawal-requests/${id}/itens/${itemId}`, payload);
+  return data.data;
+}
+
+/** Finaliza: baixa o estoque de todos os itens. */
+export async function finalizarSeparacao(id) {
+  const { data } = await api.post(`/withdrawal-requests/${id}/finalizar`);
+  return data;
+}
+
+/** Admin: reabre uma separação finalizada (devolve o estoque). */
+export async function reabrirSeparacao(id) {
+  const { data } = await api.post(`/withdrawal-requests/${id}/reabrir`);
+  return data;
 }
 
 /* ===================== Contagem / Inventário ===================== */
