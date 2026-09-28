@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Deposito extends Model
 {
-    protected $fillable = ['nome', 'ativo'];
+    protected $fillable = ['nome', 'ordem_posicoes', 'ativo'];
 
     protected function casts(): array
     {

@@ -2,15 +2,19 @@ import { useEffect, useState } from "react";
 import { criarEnderecos, zerarEstoqueGeral, statusMicrovix, sincronizarMicrovix } from "../services/api";
 import ExcluirEnderecos from "./ExcluirEnderecos";
 
-// Posições comuns (níveis 1-5, lados A/B). Chips em vez de checkbox.
-const PRESETS = [];
-for (let n = 1; n <= 5; n++) for (const s of ["A", "B"]) PRESETS.push(`${n}${s}`);
+// Posições comuns em chips. Goiânia: níveis 1-5 x lados A/B (1A, 1B...).
+// São Paulo (ordem alfabética): letras A-E x 1-5 (A1, A2... E5).
+const PRESETS_NIVEL = [];
+for (let n = 1; n <= 5; n++) for (const s of ["A", "B"]) PRESETS_NIVEL.push(`${n}${s}`);
+const PRESETS_ALFA = [];
+for (const s of ["A", "B", "C", "D", "E"]) for (let n = 1; n <= 5; n++) PRESETS_ALFA.push(`${s}${n}`);
 
 /**
  * Popup para criar novos Times (colunas) e novas posições/linhas (1A, 1B...).
  * Se o Time já existir, apenas adiciona as posições novas.
  */
-export default function AddressManager({ times = [], enderecos = [], podeGerenciar = true, podeExcluir = false, onClose, onCreated }) {
+export default function AddressManager({ times = [], alfabetica = false, enderecos = [], podeGerenciar = true, podeExcluir = false, onClose, onCreated }) {
+  const PRESETS = alfabetica ? PRESETS_ALFA : PRESETS_NIVEL;
   const [time, setTime] = useState("");
   const [selecionadas, setSelecionadas] = useState([]);
   const [custom, setCustom] = useState("");
@@ -141,7 +145,7 @@ export default function AddressManager({ times = [], enderecos = [], podeGerenci
               list="times-existentes"
               value={time}
               onChange={(e) => setTime(e.target.value)}
-              placeholder="Ex.: SANTOS (novo) ou escolha um existente"
+              placeholder={alfabetica ? "Ex.: RUA 1 (nova) ou escolha uma existente" : "Ex.: SANTOS (novo) ou escolha um existente"}
               className="input-nuvem"
             />
             <datalist id="times-existentes">
@@ -197,7 +201,7 @@ export default function AddressManager({ times = [], enderecos = [], podeGerenci
                 value={custom}
                 onChange={(e) => setCustom(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustom())}
-                placeholder="Outra posição (ex.: 6A)"
+                placeholder={alfabetica ? "Outra posição (ex.: F1)" : "Outra posição (ex.: 6A)"}
                 className="input-nuvem"
               />
               <button type="button" onClick={addCustom} className="btn-ghost whitespace-nowrap">

@@ -206,7 +206,7 @@ function FormMovimentacao() {
 function SelectEndereco({ locais, value, onChange, placeholder }) {
   const grupos = useMemo(() => {
     const m = new Map();
-    for (const l of [...locais].sort((a, b) => (a.nome || "").localeCompare(b.nome || ""))) {
+    for (const l of [...locais].sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt-BR", { numeric: true }))) {
       const t = l.corredor || "Outros";
       if (!m.has(t)) m.set(t, []);
       m.get(t).push(l);

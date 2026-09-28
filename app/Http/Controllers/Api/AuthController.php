@@ -71,7 +71,7 @@ class AuthController extends Controller
             'role'        => $u->role,
             'is_admin'    => $u->isAdmin(),
             'permissions' => $u->permissoesEfetivas(),
-            'depositos'   => Deposito::whereIn('id', $u->depositosPermitidos())->orderBy('id')->get(['id', 'nome']),
+            'depositos'   => Deposito::whereIn('id', $u->depositosPermitidos())->orderBy('id')->get(['id', 'nome', 'ordem_posicoes']),
         ];
     }
 }

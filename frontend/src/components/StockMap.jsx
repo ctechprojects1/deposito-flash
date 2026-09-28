@@ -20,8 +20,13 @@ function parsePosicao(esteira) {
   return { nivel: m ? parseInt(m[1], 10) : 0, lado: m && m[2] ? m[2].toUpperCase() : "" };
 }
 
+/** Ordem "humana": A2 antes de A10, Rua 2 antes de Rua 10. */
+const natural = (a, b) => String(a).localeCompare(String(b), "pt-BR", { numeric: true, sensitivity: "base" });
+
 export default function StockMap() {
-  const { hasPerm } = useAuth();
+  const { hasPerm, deposito } = useAuth();
+  // Ordem das posições é por CD: Goiânia 1A, 1B, 2A... / São Paulo A1, A2, A3, B1...
+  const alfabetica = deposito?.ordem_posicoes === "alfabetica";
   const podeGerenciar = hasPerm("gerenciar_enderecos");
   const podeExcluir = hasPerm("excluir_enderecos");
   const [locations, setLocations] = useState([]);
@@ -56,11 +61,12 @@ export default function StockMap() {
   const posicoes = useMemo(() => {
     const set = new Set();
     locations.forEach((l) => l.esteira && set.add(l.esteira));
+    if (alfabetica) return Array.from(set).sort(natural);
     return Array.from(set).sort((a, b) => {
       const pa = parsePosicao(a), pb = parsePosicao(b);
       return pa.nivel - pb.nivel || pa.lado.localeCompare(pb.lado);
     });
-  }, [locations]);
+  }, [locations, alfabetica]);
 
   const times = useMemo(() => {
     const grupos = new Map();
@@ -72,8 +78,10 @@ export default function StockMap() {
       g.total += Number(loc.total_quantidade || 0);
       g.ordem = Math.min(g.ordem, loc.eixo_x || 9999);
     }
-    return Array.from(grupos.values()).sort((a, b) => a.ordem - b.ordem || a.time.localeCompare(b.time));
-  }, [locations]);
+    const lista = Array.from(grupos.values());
+    if (alfabetica) return lista.sort((a, b) => natural(a.time, b.time));
+    return lista.sort((a, b) => a.ordem - b.ordem || a.time.localeCompare(b.time));
+  }, [locations, alfabetica]);
 
   // Só bloqueia a tela na PRIMEIRA carga; recargas mantêm o mapa (e o modal aberto).
   if (loading && locations.length === 0)
@@ -91,7 +99,7 @@ export default function StockMap() {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-xl font-extrabold text-slate-800">Mapa do Armazém</h2>
-          <p className="text-sm text-slate-400">{times.length} times · {locations.length} endereços</p>
+          <p className="text-sm text-slate-400">{times.length} {alfabetica ? "ruas" : "times"} · {locations.length} endereços</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Legenda />
@@ -109,7 +117,7 @@ export default function StockMap() {
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 backdrop-blur">
                 <th className="sticky left-0 z-20 bg-slate-50/95 px-4 py-3 text-left font-semibold backdrop-blur">
-                  Time
+                  {alfabetica ? "Rua" : "Time"}
                 </th>
                 {posicoes.map((p) => (
                   <th key={p} className="min-w-[58px] px-2 py-3 text-center text-xs font-bold uppercase tracking-wide">
@@ -162,6 +170,7 @@ export default function StockMap() {
       {gerenciar && (
         <AddressManager
           times={times.map((t) => t.time)}
+          alfabetica={alfabetica}
           enderecos={locations}
           podeGerenciar={podeGerenciar}
           podeExcluir={podeExcluir}
