@@ -82,8 +82,7 @@ class StockImportService
                     $time, $codigo, $nome, $quantidade, $somar,
                     &$cacheLocais, &$cacheProdutos
                 ) {
-                    $location = $cacheLocais[$time]
-                        ??= Location::firstOrCreate(['nome' => $time]);
+                    $location = $cacheLocais[$time] ??= $this->localPorNome($time);
 
                     $product = $cacheProdutos[$codigo] ??= Product::firstOrCreate(
                         ['codigo_microvix' => $codigo],
@@ -183,5 +182,16 @@ class StockImportService
         }
 
         return max(0.0, (float) $valor);
+    }
+
+    /** Endereço pelo nome; se foi excluído antes, é restaurado. */
+    private function localPorNome(string $nome): Location
+    {
+        $loc = Location::withTrashed()->firstOrCreate(['nome' => $nome]);
+        if ($loc->trashed()) {
+            $loc->restore();
+        }
+
+        return $loc;
     }
 }

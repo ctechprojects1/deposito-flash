@@ -225,7 +225,7 @@ class WithdrawalRequestController extends Controller
 
         $dados = $request->validate([
             'retirado'    => ['sometimes', 'boolean'],
-            'location_id' => ['sometimes', 'nullable', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())],
+            'location_id' => ['sometimes', 'nullable', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())->whereNull('deleted_at')],
         ]);
 
         if (array_key_exists('location_id', $dados)) {

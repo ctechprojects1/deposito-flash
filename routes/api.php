@@ -34,6 +34,7 @@ Route::middleware('auth.token')->group(function () {
         Route::get('/locations', [LocationController::class, 'index'])->middleware('perm:ver_mapa');
         Route::get('/locations/{location}', [LocationController::class, 'show'])->middleware('perm:ver_mapa');
         Route::post('/locations', [LocationController::class, 'store'])->middleware('perm:gerenciar_enderecos');
+        Route::post('/locations/excluir', [LocationController::class, 'excluir'])->middleware('perm:excluir_enderecos');
         Route::post('/locations/{location}/zerar', [LocationController::class, 'zerar'])->middleware('perm:gerenciar_enderecos');
         Route::post('/locations/{location}/produtos', [LocationController::class, 'adicionarProduto'])->middleware('perm:gerenciar_enderecos');
         Route::put('/locations/{location}/produtos/{stock}', [LocationController::class, 'atualizarSaldo'])->middleware('perm:gerenciar_enderecos');

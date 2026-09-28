@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\InventoryCount;
+use App\Models\InventoryCountItem;
 use App\Models\Location;
 use App\Models\Product;
 use App\Models\Stock;
+use App\Models\WithdrawalItem;
+use App\Models\WithdrawalRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -121,15 +125,23 @@ class LocationController extends Controller
 
                 $lado  = preg_match('/[AB]$/', $pos) ? substr($pos, -1) : 'A';
                 $nivel = (int) preg_replace('/\D/', '', $pos);
-
-                $loc = Location::create([
+                $campos = [
                     'nome'     => $nome,
                     'corredor' => $time,
                     'esteira'  => $pos,
                     'eixo_x'   => $base + ($lado === 'B' ? 1 : 0),
                     'eixo_y'   => $nivel,
                     'ativo'    => true,
-                ]);
+                ];
+
+                // Nome de um endereço excluído antes: reaproveita o registro.
+                $loc = Location::onlyTrashed()->where('nome', $nome)->first();
+                if ($loc) {
+                    $loc->restore();
+                    $loc->update($campos);
+                } else {
+                    $loc = Location::create($campos);
+                }
 
                 $criados[] = ['id' => $loc->id, 'nome' => $loc->nome];
             }
@@ -141,6 +153,81 @@ class LocationController extends Controller
             'criados'   => $criados,
             'ignorados' => $ignorados,
         ], 201);
+    }
+
+    /**
+     * Exclui endereços (um ou vários, ex.: um Time inteiro).
+     * Só exclui endereço vazio e fora de solicitação/contagem em aberto;
+     * os demais voltam em `bloqueados` com o motivo.
+     *
+     * POST /api/locations/excluir  { ids: [..] }
+     */
+    public function excluir(Request $request): JsonResponse
+    {
+        $dados = $request->validate([
+            'ids'   => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+        ]);
+
+        // Só enxerga endereços do CD atual.
+        $locais = Location::whereIn('id', $dados['ids'])->get();
+        $excluidos = [];
+        $bloqueados = [];
+
+        foreach ($locais as $loc) {
+            $motivo = $this->motivoNaoExcluir($loc);
+            if ($motivo) {
+                $bloqueados[] = ['id' => $loc->id, 'nome' => $loc->nome, 'motivo' => $motivo];
+                continue;
+            }
+
+            DB::transaction(function () use ($loc) {
+                $loc->stocks()->delete(); // só registros zerados
+                $loc->delete();
+            });
+            $excluidos[] = $loc->nome;
+        }
+
+        $msg = $excluidos
+            ? count($excluidos) . ' endereço(s) excluído(s).'
+            : 'Nenhum endereço excluído.';
+        if ($bloqueados) {
+            $msg .= ' Não excluído(s): ' . count($bloqueados) . '.';
+        }
+
+        return response()->json([
+            'message'    => $msg,
+            'excluidos'  => $excluidos,
+            'bloqueados' => $bloqueados,
+        ], $excluidos ? 200 : 422);
+    }
+
+    private function motivoNaoExcluir(Location $loc): ?string
+    {
+        $saldo = (float) $loc->stocks()->sum('quantidade');
+        if ($saldo > 0) {
+            return 'ainda tem ' . rtrim(rtrim(number_format($saldo, 2, ',', ''), '0'), ',')
+                 . ' un. em estoque (zere ou movimente antes)';
+        }
+
+        $emSolicitacao = WithdrawalItem::where('location_id', $loc->id)
+            ->whereHas('withdrawalRequest', fn ($q) => $q->whereIn('status', [
+                WithdrawalRequest::STATUS_PENDENTE,
+                WithdrawalRequest::STATUS_EM_SEPARACAO,
+                WithdrawalRequest::STATUS_PAUSADA,
+            ]))->exists();
+        if ($emSolicitacao) {
+            return 'está em uma solicitação ainda não finalizada';
+        }
+
+        $emContagem = InventoryCountItem::where('location_id', $loc->id)
+            ->whereHas('inventoryCount', fn ($q) => $q->where('status', InventoryCount::STATUS_ABERTA))
+            ->exists();
+        if ($emContagem) {
+            return 'está em uma contagem aberta';
+        }
+
+        return null;
     }
 
     /**

@@ -17,6 +17,7 @@ const PERM_LABELS = {
   importar: "Importar CSV",
   relatorios: "Relatórios",
   gerenciar_enderecos: "Gerenciar endereços",
+  excluir_enderecos: "Excluir endereços",
   admin: "Administração (usuários)",
 };
 

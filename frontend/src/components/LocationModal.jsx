@@ -3,6 +3,7 @@ import {
   fetchLocation,
   fetchLocations,
   zerarEndereco,
+  excluirEnderecos,
   adicionarProdutoLocal,
   removerProdutoLocal,
   atualizarSaldoLocal,
@@ -15,10 +16,11 @@ import {
  * Modal que lista os produtos guardados num endereço e permite (com permissão
  * gerenciar_enderecos) adicionar novos produtos, excluir e zerar o estoque.
  */
-export default function LocationModal({ location, onClose, onChanged, podeGerenciar = true }) {
+export default function LocationModal({ location, onClose, onChanged, podeGerenciar = true, podeExcluir = false }) {
   const [detalhe, setDetalhe] = useState(location);
   const [loading, setLoading] = useState(false);
   const [zerando, setZerando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
 
   // Form de novo produto
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -143,6 +145,21 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  async function excluir() {
+    if (!window.confirm(`Excluir o endereço ${detalhe.nome}? Ele some do mapa (o histórico continua guardado).`)) return;
+    setExcluindo(true);
+    try {
+      await excluirEnderecos([detalhe.id]);
+      onChanged?.();
+      onClose();
+    } catch (e) {
+      const d = e?.response?.data;
+      alert(d?.bloqueados?.[0] ? `Não foi possível excluir ${d.bloqueados[0].nome}: ${d.bloqueados[0].motivo}.` : d?.message || "Erro ao excluir.");
+    } finally {
+      setExcluindo(false);
+    }
+  }
 
   async function zerar() {
     if (!window.confirm(`Zerar o estoque de ${detalhe.nome}? Todas as quantidades deste endereço vão para 0.`))
@@ -540,6 +557,16 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
         <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/70 px-5 py-3 text-sm text-slate-500">
           <span>{produtos.length} produto(s)</span>
           <div className="flex items-center gap-2">
+            {podeExcluir && (
+              <button
+                onClick={excluir}
+                disabled={excluindo}
+                title={produtos.some((p) => Number(p.quantidade) > 0) ? "Zere o estoque antes de excluir" : "Excluir este endereço"}
+                className="inline-flex items-center rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {excluindo ? "Excluindo..." : "Excluir endereço"}
+              </button>
+            )}
             {podeGerenciar && (
               <button
                 onClick={zerar}

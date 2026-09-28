@@ -25,7 +25,7 @@ class StockController extends Controller
     public function entrada(Request $request): JsonResponse
     {
         $dados = $request->validate([
-            'location_id' => ['required', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())],
+            'location_id' => ['required', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())->whereNull('deleted_at')],
             'product_id'  => ['required', 'integer', 'exists:products,id'],
             'quantidade'  => ['required', 'numeric', 'gt:0'],
         ]);
@@ -54,7 +54,7 @@ class StockController extends Controller
     public function baixa(Request $request): JsonResponse
     {
         $dados = $request->validate([
-            'location_id' => ['required', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())],
+            'location_id' => ['required', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())->whereNull('deleted_at')],
             'product_id'  => ['required', 'integer', 'exists:products,id'],
             'quantidade'  => ['required', 'numeric', 'gt:0'],
         ]);

@@ -23,6 +23,7 @@ function parsePosicao(esteira) {
 export default function StockMap() {
   const { hasPerm } = useAuth();
   const podeGerenciar = hasPerm("gerenciar_enderecos");
+  const podeExcluir = hasPerm("excluir_enderecos");
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -94,7 +95,7 @@ export default function StockMap() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Legenda />
-          {podeGerenciar && (
+          {(podeGerenciar || podeExcluir) && (
             <button onClick={() => setGerenciar(true)} className="btn-nuvem">
               Gerenciar endereços
             </button>
@@ -154,12 +155,16 @@ export default function StockMap() {
           onClose={() => setSelecionado(null)}
           onChanged={carregar}
           podeGerenciar={podeGerenciar}
+          podeExcluir={podeExcluir}
         />
       )}
 
       {gerenciar && (
         <AddressManager
           times={times.map((t) => t.time)}
+          enderecos={locations}
+          podeGerenciar={podeGerenciar}
+          podeExcluir={podeExcluir}
           onClose={() => setGerenciar(false)}
           onCreated={carregar}
         />

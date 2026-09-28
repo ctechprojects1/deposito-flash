@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { criarEnderecos, zerarEstoqueGeral, statusMicrovix, sincronizarMicrovix } from "../services/api";
+import ExcluirEnderecos from "./ExcluirEnderecos";
 
 // Posições comuns (níveis 1-5, lados A/B). Chips em vez de checkbox.
 const PRESETS = [];
@@ -9,7 +10,7 @@ for (let n = 1; n <= 5; n++) for (const s of ["A", "B"]) PRESETS.push(`${n}${s}`
  * Popup para criar novos Times (colunas) e novas posições/linhas (1A, 1B...).
  * Se o Time já existir, apenas adiciona as posições novas.
  */
-export default function AddressManager({ times = [], onClose, onCreated }) {
+export default function AddressManager({ times = [], enderecos = [], podeGerenciar = true, podeExcluir = false, onClose, onCreated }) {
   const [time, setTime] = useState("");
   const [selecionadas, setSelecionadas] = useState([]);
   const [custom, setCustom] = useState("");
@@ -32,8 +33,8 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
   }
 
   useEffect(() => {
-    carregarStatusMvx();
-  }, []);
+    if (podeGerenciar) carregarStatusMvx();
+  }, [podeGerenciar]);
 
   async function sincronizarMvx() {
     setErro(null);
@@ -132,6 +133,7 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
           {erro && <div className="rounded-xl bg-rose-100 p-3 text-sm text-rose-800">{erro}</div>}
           {msg && <div className="rounded-xl bg-emerald-100 p-3 text-sm text-emerald-800">{msg}</div>}
 
+          {podeGerenciar && (<>
           {/* Time */}
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">Time (coluna)</label>
@@ -222,7 +224,12 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
             </button>
           </div>
 
-          {/* Zona de perigo — zerar estoque geral */}
+          </>)}
+
+          {podeExcluir && <ExcluirEnderecos enderecos={enderecos} onExcluidos={onCreated} />}
+
+          {podeGerenciar && (
+          /* Zona de perigo — zerar estoque geral */
           <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4">
             <h3 className="text-sm font-bold text-rose-700">Zona de perigo</h3>
             <p className="mt-1 text-xs text-rose-600">
@@ -246,15 +253,18 @@ export default function AddressManager({ times = [], onClose, onCreated }) {
               </button>
             </div>
           </div>
+          )}
         </div>
 
         {/* Rodapé */}
+        {podeGerenciar && (
         <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-5 py-3">
           <span className="text-sm text-slate-500">{selecionadas.length} posição(ões) selecionada(s)</span>
           <button onClick={criar} disabled={salvando} className="btn-nuvem">
             {salvando ? "Criando..." : "Criar endereços"}
           </button>
         </div>
+        )}
       </div>
     </div>
   );

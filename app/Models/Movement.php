@@ -38,12 +38,12 @@ class Movement extends Model
 
     public function origem(): BelongsTo
     {
-        return $this->belongsTo(Location::class, 'origin_location_id');
+        return $this->belongsTo(Location::class, 'origin_location_id')->withTrashed();
     }
 
     public function destino(): BelongsTo
     {
-        return $this->belongsTo(Location::class, 'destination_location_id');
+        return $this->belongsTo(Location::class, 'destination_location_id')->withTrashed();
     }
 
     public function user(): BelongsTo

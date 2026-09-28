@@ -110,6 +110,12 @@ export async function criarEnderecos(time, posicoes) {
   return data;
 }
 
+/** Exclui endereços (vazios). Retorna { message, excluidos, bloqueados }. */
+export async function excluirEnderecos(ids) {
+  const { data } = await api.post("/locations/excluir", { ids });
+  return data;
+}
+
 /** Zera o estoque de um endereço. */
 export async function zerarEndereco(id) {
   const { data } = await api.post(`/locations/${id}/zerar`);

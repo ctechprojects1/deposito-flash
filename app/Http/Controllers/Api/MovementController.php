@@ -24,8 +24,8 @@ class MovementController extends Controller
     {
         $dados = $request->validate([
             'product_id'              => ['required', 'integer', 'exists:products,id'],
-            'origin_location_id'      => ['required', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())],
-            'destination_location_id' => ['required', 'integer', 'different:origin_location_id', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())],
+            'origin_location_id'      => ['required', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())->whereNull('deleted_at')],
+            'destination_location_id' => ['required', 'integer', 'different:origin_location_id', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())->whereNull('deleted_at')],
             'quantidade'              => ['required', 'numeric', 'gt:0'],
             'motivo'                  => ['required', 'string', 'max:255'],
         ], [
