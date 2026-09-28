@@ -189,6 +189,8 @@ function LinhaChecklist({ item, estado, onChange }) {
   const qtd = Number(estado?.quantidade);
   const invalida = marcado && (!(qtd > 0) || qtd > item.quantidade);
   const semSaldo = marcado && qtd > item.estoque_total;
+  // Mesma regra do sistema: menor saldo que comporte a quantidade; senão o maior.
+  const sugerido = item.locais.find((l) => l.quantidade >= (qtd || 0)) ?? item.locais[item.locais.length - 1];
 
   if (!item.no_deposito) {
     return (
@@ -225,7 +227,7 @@ function LinhaChecklist({ item, estado, onChange }) {
         <div className="font-mono text-xs text-slate-400">cód. {item.codigo}</div>
         <div className="text-xs text-slate-500">
           Depósito: {item.estoque_total} un
-          {item.locais[0] && ` · ${item.locais[0].nome} (${item.locais[0].quantidade})`}
+          {sugerido && ` · ${sugerido.nome} (${sugerido.quantidade})`}
           {item.locais.length > 1 && ` +${item.locais.length - 1} endereço(s)`}
         </div>
       </div>

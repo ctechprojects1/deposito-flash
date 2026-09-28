@@ -353,7 +353,7 @@ class WithdrawalRequestController extends Controller
 
         return $product->stocks
             ->where('quantidade', '>', 0)
-            ->sortByDesc('quantidade')
+            ->sortBy('quantidade')
             ->map(fn ($st) => [
                 'location_id' => $st->location_id,
                 'nome'        => $st->location?->nome,
@@ -363,17 +363,20 @@ class WithdrawalRequestController extends Controller
             ->all();
     }
 
-    /** Endereço com mais saldo que comporte a quantidade (ou o de mais saldo). */
+    /**
+     * Endereço de MENOR saldo que ainda comporte a quantidade (esvazia primeiro
+     * os endereços com pouco). Se nenhum comporta, o de maior saldo.
+     */
     private function enderecoSugerido(int $productId, float $qtd): ?int
     {
-        $locais = $this->locaisComSaldo(Product::findOrFail($productId));
+        $locais = $this->locaisComSaldo(Product::findOrFail($productId)); // menor -> maior
         foreach ($locais as $l) {
             if ($l['quantidade'] >= $qtd) {
                 return $l['location_id'];
             }
         }
 
-        return $locais[0]['location_id'] ?? null;
+        return $locais ? end($locais)['location_id'] : null;
     }
 
     private function resumo(WithdrawalRequest $s): array
