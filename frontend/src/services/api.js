@@ -270,6 +270,12 @@ export async function atualizarItemSeparacao(id, itemId, payload) {
   return data.data;
 }
 
+/** Divide a linha entre endereços quando o endereço não tem a quantidade toda. */
+export async function dividirItemSeparacao(id, itemId) {
+  const { data } = await api.post(`/withdrawal-requests/${id}/itens/${itemId}/dividir`);
+  return data; // { message, data }
+}
+
 /** Finaliza: baixa o estoque de todos os itens. */
 export async function finalizarSeparacao(id) {
   const { data } = await api.post(`/withdrawal-requests/${id}/finalizar`);

@@ -8,6 +8,7 @@ import {
   finalizarSeparacao,
   reabrirSeparacao,
   abrirDocumentoSolicitacao,
+  dividirItemSeparacao,
 } from "../services/api";
 import { useAuth } from "../AuthContext";
 import useAutoRefresh from "../hooks/useAutoRefresh";
@@ -215,6 +216,22 @@ function Checklist({ id, onVoltar }) {
     }
   }
 
+  async function dividirItem(item) {
+    versao.current++;
+    setErro(null);
+    setAviso(null);
+    setItemOcupado(item.item_id);
+    try {
+      const r = await dividirItemSeparacao(id, item.item_id);
+      setS(r.data);
+      setAviso(r.message);
+    } catch (e) {
+      setErro(e?.response?.data?.message || "Não foi possível dividir o item.");
+    } finally {
+      setItemOcupado(null);
+    }
+  }
+
   if (!s) {
     return (
       <div className="mx-auto max-w-4xl px-4">
@@ -303,6 +320,7 @@ function Checklist({ id, onVoltar }) {
             ocupado={itemOcupado === it.item_id}
             concluida={concluida}
             onAlterar={(payload) => alterarItem(it, payload)}
+            onDividir={() => dividirItem(it)}
           />
         ))}
       </div>
@@ -364,7 +382,7 @@ function Checklist({ id, onVoltar }) {
   );
 }
 
-function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar }) {
+function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividir }) {
   const marcado = item.retirado;
   const localEscolhido = item.locais.find((l) => l.location_id === item.location_id);
   const semSaldo = !concluida && localEscolhido && localEscolhido.quantidade < item.quantidade_solicitada;
@@ -390,7 +408,14 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar }) {
         <div className={`truncate text-sm font-medium ${marcado ? "text-slate-500 line-through" : "text-slate-800"}`}>
           {item.produto || item.descricao_documento}
         </div>
-        <div className="font-mono text-xs text-slate-400">cód. {item.codigo_microvix}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-xs text-slate-400">cód. {item.codigo_microvix}</span>
+          {item.partes > 1 && (
+            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600">
+              parte {item.parte} de {item.partes}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="w-44">
@@ -413,6 +438,15 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar }) {
           <div className="text-sm font-bold text-indigo-700">{item.endereco || "—"}</div>
         )}
         {semSaldo && <div className="mt-0.5 text-[11px] text-amber-600">saldo {localEscolhido.quantidade} no endereço</div>}
+        {semSaldo && editavel && !marcado && (
+          <button
+            onClick={onDividir}
+            disabled={ocupado}
+            className="mt-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-3 py-1 text-[11px] font-bold text-white shadow-md shadow-orange-500/30 transition hover:-translate-y-0.5 disabled:opacity-60"
+          >
+            Completar com outro endereço
+          </button>
+        )}
       </div>
 
       <div className="w-16 text-right">

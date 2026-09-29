@@ -101,17 +101,31 @@ class WithdrawalRequestController extends Controller
                     'status'           => WithdrawalRequest::STATUS_PENDENTE,
                 ]);
 
+                // Um item pode virar várias linhas (uma por endereço) quando
+                // nenhum endereço sozinho tem a quantidade toda.
+                $reservado = []; // product_id => [location_id => qtd]
                 foreach ($dados['itens'] as $it) {
-                    $qtd = (float) $it['quantidade_solicitada'];
-                    $s->items()->create([
-                        'product_id'            => $it['product_id'],
-                        'codigo_microvix'       => $it['codigo_microvix'] ?? null,
-                        'descricao'             => $it['descricao'] ?? null,
-                        'quantidade_documento'  => $it['quantidade_documento'] ?? 0,
-                        'quantidade_solicitada' => $qtd,
-                        'quantidade_separada'   => 0,
-                        'location_id'           => $this->enderecoSugerido((int) $it['product_id'], $qtd),
-                    ]);
+                    $pid = (int) $it['product_id'];
+                    $partes = $this->alocarEnderecos(
+                        Product::findOrFail($pid),
+                        (float) $it['quantidade_solicitada'],
+                        $reservado[$pid] ?? []
+                    );
+
+                    foreach ($partes as $p) {
+                        $s->items()->create([
+                            'product_id'            => $pid,
+                            'codigo_microvix'       => $it['codigo_microvix'] ?? null,
+                            'descricao'             => $it['descricao'] ?? null,
+                            'quantidade_documento'  => $it['quantidade_documento'] ?? 0,
+                            'quantidade_solicitada' => $p['quantidade'],
+                            'quantidade_separada'   => 0,
+                            'location_id'           => $p['location_id'],
+                        ]);
+                        if ($p['location_id']) {
+                            $reservado[$pid][$p['location_id']] = ($reservado[$pid][$p['location_id']] ?? 0) + $p['quantidade'];
+                        }
+                    }
                 }
 
                 return $s;
@@ -241,6 +255,68 @@ class WithdrawalRequestController extends Controller
     }
 
     /**
+     * O endereço não tem a quantidade toda: divide a linha entre endereços
+     * (mesma regra da criação). Ex.: 20 un. em PAYSANDU 1A (10) -> 10 + 10.
+     * POST .../{id}/itens/{item}/dividir
+     */
+    public function dividirItem(WithdrawalRequest $withdrawalRequest, WithdrawalItem $item): JsonResponse
+    {
+        if ($item->withdrawal_request_id !== $withdrawalRequest->id) {
+            return response()->json(['message' => 'Item não pertence a esta solicitação.'], 404);
+        }
+        if ($withdrawalRequest->status !== WithdrawalRequest::STATUS_EM_SEPARACAO) {
+            return response()->json(['message' => 'Inicie ou retome a separação para dividir o item.'], 409);
+        }
+        if ($item->retirado) {
+            return response()->json(['message' => 'Desmarque o item antes de dividir.'], 422);
+        }
+
+        $partes = $this->alocarEnderecos(
+            $item->product,
+            (float) $item->quantidade_solicitada,
+            $this->reservadoNaSolicitacao($withdrawalRequest, $item->product_id, $item->id)
+        );
+
+        if (count($partes) < 2) {
+            $unica = $partes[0] ?? null;
+            if (! $unica || ! $unica['location_id'] || $unica['location_id'] === $item->location_id) {
+                return response()->json([
+                    'message' => 'Não há outro endereço com saldo para completar este item neste CD.',
+                ], 422);
+            }
+
+            // Um endereço sozinho dá conta: só troca.
+            $item->update(['location_id' => $unica['location_id']]);
+            return response()->json([
+                'message' => 'Endereço trocado para ' . $item->fresh()->location?->nome . ', que tem a quantidade toda.',
+                'data'    => $this->detalhe($withdrawalRequest->fresh()),
+            ]);
+        }
+
+        DB::transaction(function () use ($item, $partes) {
+            $primeira = array_shift($partes);
+            $item->update([
+                'location_id'           => $primeira['location_id'],
+                'quantidade_solicitada' => $primeira['quantidade'],
+            ]);
+
+            foreach ($partes as $p) {
+                $nova = $item->replicate(['retirado', 'retirado_em']);
+                $nova->location_id = $p['location_id'];
+                $nova->quantidade_solicitada = $p['quantidade'];
+                $nova->quantidade_separada = 0;
+                $nova->retirado = false;
+                $nova->save();
+            }
+        });
+
+        return response()->json([
+            'message' => 'Item dividido em ' . count($partes) . ' endereços.',
+            'data'    => $this->detalhe($withdrawalRequest->fresh()),
+        ]);
+    }
+
+    /**
      * Finaliza: todos os itens marcados -> baixa no estoque (tudo ou nada).
      * POST .../{id}/finalizar
      */
@@ -364,19 +440,64 @@ class WithdrawalRequestController extends Controller
     }
 
     /**
-     * Endereço de MENOR saldo que ainda comporte a quantidade (esvazia primeiro
-     * os endereços com pouco). Se nenhum comporta, o de maior saldo.
+     * Divide a quantidade entre endereços:
+     *  - se um endereço comporta tudo: o de MENOR saldo que comporte (esvazia os pequenos);
+     *  - senão: tira tudo do maior e repete com o que falta (ex.: 20 un. com
+     *    endereços de 10 -> 10 + 10), usando o mínimo de endereços.
+     * Se o CD não tem saldo suficiente, a falta fica na última parte (o
+     * separador vê o aviso de saldo). $reservado = [location_id => qtd] já
+     * comprometida por outras linhas da mesma solicitação.
+     *
+     * @return array<int, array{location_id: ?int, quantidade: float}>
      */
-    private function enderecoSugerido(int $productId, float $qtd): ?int
+    private function alocarEnderecos(Product $product, float $qtd, array $reservado = []): array
     {
-        $locais = $this->locaisComSaldo(Product::findOrFail($productId)); // menor -> maior
-        foreach ($locais as $l) {
-            if ($l['quantidade'] >= $qtd) {
-                return $l['location_id'];
+        $livres = [];
+        foreach ($this->locaisComSaldo($product) as $l) { // menor -> maior
+            $q = round($l['quantidade'] - ($reservado[$l['location_id']] ?? 0), 2);
+            if ($q > 0) {
+                $livres[] = ['location_id' => $l['location_id'], 'quantidade' => $q];
+            }
+        }
+        usort($livres, fn ($a, $b) => $a['quantidade'] <=> $b['quantidade']);
+
+        $partes = [];
+        $restante = round($qtd, 2);
+        while ($restante > 0 && $livres) {
+            foreach ($livres as $l) {
+                if ($l['quantidade'] >= $restante) {
+                    $partes[] = ['location_id' => $l['location_id'], 'quantidade' => $restante];
+                    return $partes;
+                }
+            }
+            $maior = array_pop($livres);
+            $partes[] = $maior;
+            $restante = round($restante - $maior['quantidade'], 2);
+        }
+
+        if ($restante > 0) {
+            if ($partes) {
+                $partes[count($partes) - 1]['quantidade'] = round($partes[count($partes) - 1]['quantidade'] + $restante, 2);
+            } else {
+                $partes[] = ['location_id' => null, 'quantidade' => $restante];
             }
         }
 
-        return $locais ? end($locais)['location_id'] : null;
+        return $partes;
+    }
+
+    /** Quanto as OUTRAS linhas da solicitação já vão tirar de cada endereço, para este produto. */
+    private function reservadoNaSolicitacao(WithdrawalRequest $s, int $productId, ?int $ignorarItemId = null): array
+    {
+        $res = [];
+        foreach ($s->items()->where('product_id', $productId)->get() as $i) {
+            if ($i->id === $ignorarItemId || ! $i->location_id) {
+                continue;
+            }
+            $res[$i->location_id] = ($res[$i->location_id] ?? 0) + (float) $i->quantidade_solicitada;
+        }
+
+        return $res;
     }
 
     private function resumo(WithdrawalRequest $s): array
@@ -400,7 +521,18 @@ class WithdrawalRequestController extends Controller
     {
         $s->load(['items.product.stocks.location', 'items.location', 'solicitante', 'separador', 'reabertaPor']);
 
-        $itens = $s->items->map(function (WithdrawalItem $i) {
+        // Linhas do mesmo produto (item dividido entre endereços) ficam juntas,
+        // na ordem em que o produto apareceu, com "parte 1 de 2", "2 de 2"...
+        $primeiroId = $s->items->groupBy('product_id')->map(fn ($g) => $g->min('id'));
+        $partes = $s->items->groupBy('product_id')->map->count();
+        $ordem = [];
+        $ordenados = $s->items->sortBy([
+            fn ($a, $b) => $primeiroId[$a->product_id] <=> $primeiroId[$b->product_id],
+            fn ($a, $b) => $a->id <=> $b->id,
+        ]);
+
+        $itens = $ordenados->map(function (WithdrawalItem $i) use ($partes, &$ordem) {
+            $ordem[$i->product_id] = ($ordem[$i->product_id] ?? 0) + 1;
             $locais = $i->product ? $this->locaisComSaldo($i->product) : [];
 
             // O endereço escolhido aparece na lista mesmo se ficou sem saldo.
@@ -421,6 +553,8 @@ class WithdrawalRequestController extends Controller
                 'endereco'              => $i->location?->nome,
                 'locais'                => $locais,
                 'retirado'              => (bool) $i->retirado,
+                'parte'                 => $ordem[$i->product_id],
+                'partes'                => $partes[$i->product_id],
             ];
         })->values();
 

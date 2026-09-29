@@ -184,13 +184,33 @@ export default function RequestForm() {
   );
 }
 
+/**
+ * Mesma regra do servidor: o endereço de menor saldo que comporte tudo;
+ * se nenhum comporta, tira tudo do maior e repete com o que falta.
+ */
+function alocar(locais, qtd) {
+  const livres = [...locais].sort((a, b) => a.quantidade - b.quantidade);
+  const partes = [];
+  let resta = qtd;
+  while (resta > 0 && livres.length) {
+    const cobre = livres.find((l) => l.quantidade >= resta);
+    if (cobre) {
+      partes.push({ nome: cobre.nome, quantidade: resta });
+      return partes;
+    }
+    const maior = livres.pop();
+    partes.push({ nome: maior.nome, quantidade: maior.quantidade });
+    resta -= maior.quantidade;
+  }
+  return partes;
+}
+
 function LinhaChecklist({ item, estado, onChange }) {
   const marcado = !!estado?.marcado;
   const qtd = Number(estado?.quantidade);
   const invalida = marcado && (!(qtd > 0) || qtd > item.quantidade);
   const semSaldo = marcado && qtd > item.estoque_total;
-  // Mesma regra do sistema: menor saldo que comporte a quantidade; senão o maior.
-  const sugerido = item.locais.find((l) => l.quantidade >= (qtd || 0)) ?? item.locais[item.locais.length - 1];
+  const partes = alocar(item.locais, qtd || 0);
 
   if (!item.no_deposito) {
     return (
@@ -227,7 +247,7 @@ function LinhaChecklist({ item, estado, onChange }) {
         <div className="font-mono text-xs text-slate-400">cód. {item.codigo}</div>
         <div className="text-xs text-slate-500">
           Depósito: {item.estoque_total} un
-          {sugerido && ` · ${sugerido.nome} (${sugerido.quantidade})`}
+          {partes.length > 0 && " · retirar de " + partes.map((p) => `${p.nome} (${p.quantidade})`).join(" + ")}
           {item.locais.length > 1 && ` +${item.locais.length - 1} endereço(s)`}
         </div>
       </div>

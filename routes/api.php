@@ -89,6 +89,7 @@ Route::middleware('auth.token')->group(function () {
             Route::post('/withdrawal-requests/{withdrawalRequest}/iniciar', [WithdrawalRequestController::class, 'iniciar']);
             Route::post('/withdrawal-requests/{withdrawalRequest}/pausar', [WithdrawalRequestController::class, 'pausar']);
             Route::put('/withdrawal-requests/{withdrawalRequest}/itens/{item}', [WithdrawalRequestController::class, 'atualizarItem']);
+            Route::post('/withdrawal-requests/{withdrawalRequest}/itens/{item}/dividir', [WithdrawalRequestController::class, 'dividirItem']);
             Route::post('/withdrawal-requests/{withdrawalRequest}/finalizar', [WithdrawalRequestController::class, 'finalizar']);
         });
 
