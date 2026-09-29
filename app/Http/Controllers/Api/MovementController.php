@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Deposito;
 use App\Models\Movement;
 use App\Services\StockService;
+use App\Support\Historico;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,11 +38,7 @@ class MovementController extends Controller
 
         try {
             $movimento = DB::transaction(function () use ($dados, $stockService, $userId) {
-                // Baixa na origem (valida saldo) e entrada no destino.
-                $stockService->baixa($dados['origin_location_id'], $dados['product_id'], (float) $dados['quantidade']);
-                $stockService->entrada($dados['destination_location_id'], $dados['product_id'], (float) $dados['quantidade']);
-
-                return Movement::create([
+                $mov = Movement::create([
                     'product_id'              => $dados['product_id'],
                     'origin_location_id'      => $dados['origin_location_id'],
                     'destination_location_id' => $dados['destination_location_id'],
@@ -49,6 +46,14 @@ class MovementController extends Controller
                     'motivo'                  => $dados['motivo'],
                     'user_id'                 => $userId,
                 ]);
+
+                // Baixa na origem (valida saldo) e entrada no destino.
+                Historico::com('movimentacao', "Movimentação #{$mov->id}", function () use ($dados, $stockService) {
+                    $stockService->baixa($dados['origin_location_id'], $dados['product_id'], (float) $dados['quantidade']);
+                    $stockService->entrada($dados['destination_location_id'], $dados['product_id'], (float) $dados['quantidade']);
+                }, $dados['motivo']);
+
+                return $mov;
             });
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);

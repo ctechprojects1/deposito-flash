@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { relatorioProdutoLocalizacao } from "../services/api";
+import HistoricoEstoque from "./HistoricoEstoque";
 
 // Lista de relatórios disponíveis (fácil de crescer no futuro).
 const RELATORIOS = [
   { id: "produto_localizacao", label: "Produto × Localização" },
+  { id: "historico", label: "Histórico de estoque" },
 ];
 
 export default function ReportsScreen() {
   const [relatorio, setRelatorio] = useState("produto_localizacao");
 
   return (
-    <div className="mx-auto max-w-4xl px-4">
+    <div className={`mx-auto px-4 ${relatorio === "historico" ? "max-w-6xl" : "max-w-4xl"}`}>
       <h1 className="mb-4 text-2xl font-extrabold text-slate-800">Relatórios</h1>
 
       {/* Seletor de relatórios */}
@@ -31,6 +33,7 @@ export default function ReportsScreen() {
       </div>
 
       {relatorio === "produto_localizacao" && <ProdutoLocalizacao />}
+      {relatorio === "historico" && <HistoricoEstoque />}
     </div>
   );
 }

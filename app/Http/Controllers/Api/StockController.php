@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Deposito;
 use App\Models\Stock;
 use App\Services\StockService;
+use App\Support\Historico;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
@@ -31,11 +33,11 @@ class StockController extends Controller
         ]);
 
         try {
-            $stock = $this->stockService->entrada(
+            $stock = Historico::com('entrada_manual', null, fn () => $this->stockService->entrada(
                 $dados['location_id'],
                 $dados['product_id'],
                 (float) $dados['quantidade'],
-            );
+            ));
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -60,11 +62,11 @@ class StockController extends Controller
         ]);
 
         try {
-            $stock = $this->stockService->baixa(
+            $stock = Historico::com('baixa_manual', null, fn () => $this->stockService->baixa(
                 $dados['location_id'],
                 $dados['product_id'],
                 (float) $dados['quantidade'],
-            );
+            ));
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -94,7 +96,15 @@ class StockController extends Controller
      */
     public function zerarTudo(): JsonResponse
     {
-        $afetados = Stock::where('quantidade', '!=', 0)->update(['quantidade' => 0]);
+        // Um a um (e não update em massa) para cada zeragem entrar no histórico.
+        $afetados = Historico::com('zerar_geral', null, fn () => DB::transaction(function () {
+            $n = 0;
+            foreach (Stock::where('quantidade', '!=', 0)->lockForUpdate()->get() as $st) {
+                $st->update(['quantidade' => 0]);
+                $n++;
+            }
+            return $n;
+        }));
 
         return response()->json([
             'message' => "Estoque geral zerado ({$afetados} registro(s) de estoque).",

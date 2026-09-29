@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Location;
 use App\Models\Product;
 use App\Models\Stock;
+use App\Support\Historico;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -102,7 +103,7 @@ class StockImportService
                         ? (float) $stock->quantidade + $quantidade
                         : $quantidade;
 
-                    $stock->save();
+                    Historico::com('importacao', 'Importação CSV', fn () => $stock->save());
                 });
 
                 $importados++;

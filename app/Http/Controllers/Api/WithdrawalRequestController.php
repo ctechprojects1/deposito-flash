@@ -9,6 +9,7 @@ use App\Models\WithdrawalItem;
 use App\Models\WithdrawalRequest;
 use App\Services\NotaExtractorService;
 use App\Services\StockService;
+use App\Support\Historico;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -341,7 +342,8 @@ class WithdrawalRequestController extends Controller
                 foreach ($s->items as $item) {
                     $qtd = (float) $item->quantidade_solicitada;
                     try {
-                        $stock->baixa($item->location_id, $item->product_id, $qtd);
+                        Historico::com('separacao', "Solicitação #{$s->id}",
+                            fn () => $stock->baixa($item->location_id, $item->product_id, $qtd), $s->destino);
                     } catch (RuntimeException $e) {
                         throw new RuntimeException("{$item->product?->nome} em {$item->location?->nome}: {$e->getMessage()}");
                     }
@@ -379,7 +381,8 @@ class WithdrawalRequestController extends Controller
             foreach ($s->items as $item) {
                 $qtd = (float) $item->quantidade_separada;
                 if ($qtd > 0 && $item->location_id) {
-                    $stock->entrada($item->location_id, $item->product_id, $qtd);
+                    Historico::com('estorno', "Solicitação #{$s->id}",
+                        fn () => $stock->entrada($item->location_id, $item->product_id, $qtd), 'Reaberta por ' . $request->user()->name);
                 }
                 $item->update(['quantidade_separada' => 0]);
             }

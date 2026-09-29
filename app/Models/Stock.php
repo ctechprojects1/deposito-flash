@@ -30,6 +30,38 @@ class Stock extends Model
                 $q->whereIn('stocks.location_id', Location::withoutGlobalScopes()->select('id')->where('deposito_id', $id));
             }
         });
+
+        // Histórico: toda mudança de saldo feita por model (save/create/delete)
+        // vira uma linha em stock_logs. Atualizações em massa (->update() na
+        // query) NÃO passam por aqui — por isso o código evita usá-las.
+        static::created(fn (Stock $s) => $s->registrarHistorico(0, (float) $s->quantidade));
+        static::updated(function (Stock $s) {
+            if ($s->wasChanged('quantidade')) {
+                $s->registrarHistorico((float) $s->getOriginal('quantidade'), (float) $s->quantidade);
+            }
+        });
+        static::deleted(fn (Stock $s) => $s->registrarHistorico((float) $s->quantidade, 0));
+    }
+
+    private function registrarHistorico(float $antes, float $depois): void
+    {
+        if (round($antes, 2) === round($depois, 2)) {
+            return;
+        }
+
+        $ctx = \App\Support\Historico::atual();
+        StockLog::create([
+            'deposito_id'         => Location::withTrashed()->withoutGlobalScopes()->whereKey($this->location_id)->value('deposito_id'),
+            'location_id'         => $this->location_id,
+            'product_id'          => $this->product_id,
+            'user_id'             => auth()->id(),
+            'tipo'                => $ctx['tipo'],
+            'referencia'          => $ctx['referencia'],
+            'observacao'          => $ctx['observacao'],
+            'quantidade_anterior' => $antes,
+            'quantidade_nova'     => $depois,
+            'diferenca'           => round($depois - $antes, 2),
+        ]);
     }
 
     protected function casts(): array

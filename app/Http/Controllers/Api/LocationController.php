@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\Stock;
 use App\Models\WithdrawalItem;
 use App\Models\WithdrawalRequest;
+use App\Support\Historico;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -237,7 +238,15 @@ class LocationController extends Controller
      */
     public function zerar(Location $location): JsonResponse
     {
-        $afetados = $location->stocks()->where('quantidade', '!=', 0)->update(['quantidade' => 0]);
+        // Um a um (e não update em massa) para cada zeragem entrar no histórico.
+        $afetados = Historico::com('zerar_endereco', $location->nome, fn () => DB::transaction(function () use ($location) {
+            $n = 0;
+            foreach ($location->stocks()->where('quantidade', '!=', 0)->lockForUpdate()->get() as $st) {
+                $st->update(['quantidade' => 0]);
+                $n++;
+            }
+            return $n;
+        }));
 
         return response()->json([
             'message' => "Estoque de {$location->nome} zerado ({$afetados} produto(s)).",
@@ -301,11 +310,11 @@ class LocationController extends Controller
                 return response()->json(['message' => 'Este produto já está neste endereço.'], 422);
             }
 
-            Stock::create([
+            Historico::com('adicao', null, fn () => Stock::create([
                 'location_id' => $location->id,
                 'product_id'  => $product->id,
                 'quantidade'  => $dados['quantidade'] ?? 0,
-            ]);
+            ]));
 
             return response()->json(['message' => 'Produto adicionado ao endereço.'], 201);
         });
@@ -324,10 +333,11 @@ class LocationController extends Controller
             'itens'                => ['required', 'array', 'min:1'],
             'itens.*.product_id'   => ['required', 'integer', 'exists:products,id'],
             'itens.*.quantidade'   => ['required', 'numeric', 'min:0'],
+            'origem'               => ['nullable', 'string', 'max:120'],
         ]);
 
         $n = 0;
-        DB::transaction(function () use ($dados, $location, &$n) {
+        Historico::com('replicacao', $dados['origem'] ?? null, fn () => DB::transaction(function () use ($dados, $location, &$n) {
             foreach ($dados['itens'] as $it) {
                 Stock::updateOrCreate(
                     ['location_id' => $location->id, 'product_id' => $it['product_id']],
@@ -335,7 +345,7 @@ class LocationController extends Controller
                 );
                 $n++;
             }
-        });
+        }));
 
         return response()->json([
             'message' => "{$n} produto(s) replicado(s) para {$location->nome}.",
@@ -357,7 +367,7 @@ class LocationController extends Controller
             'quantidade' => ['required', 'numeric', 'min:0'],
         ]);
 
-        $stock->update(['quantidade' => $dados['quantidade']]);
+        Historico::com('ajuste', null, fn () => $stock->update(['quantidade' => $dados['quantidade']]));
 
         return response()->json(['message' => 'Saldo atualizado.']);
     }
@@ -373,7 +383,7 @@ class LocationController extends Controller
             return response()->json(['message' => 'Item não pertence a este endereço.'], 404);
         }
 
-        $stock->delete();
+        Historico::com('remocao', null, fn () => $stock->delete());
 
         return response()->json(['message' => 'Produto removido do endereço.']);
     }

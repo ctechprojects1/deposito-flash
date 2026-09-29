@@ -8,6 +8,7 @@ import {
   removerProdutoLocal,
   atualizarSaldoLocal,
   replicarParaLocal,
+  historicoEndereco,
   consultarMicrovix,
   sincronizarMicrovix,
 } from "../services/api";
@@ -43,6 +44,8 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
 
   // Replicar de outro endereço
   const [replicando, setReplicando] = useState(false);
+  const [historico, setHistorico] = useState(null); // null = fechado
+  const [carregandoHist, setCarregandoHist] = useState(false);
   const [locaisTodos, setLocaisTodos] = useState([]);
   const [origemId, setOrigemId] = useState("");
   const [itensRep, setItensRep] = useState([]);
@@ -81,7 +84,8 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
     if (itens.length === 0) return setErroRep("Selecione um endereço de origem com produtos.");
     setSalvandoRep(true);
     try {
-      await replicarParaLocal(detalhe.id, itens);
+      const origem = locaisTodos.find((l) => String(l.id) === String(origemId));
+      await replicarParaLocal(detalhe.id, itens, origem ? `De ${origem.nome}` : null);
       setReplicando(false);
       setOrigemId("");
       setItensRep([]);
@@ -158,6 +162,18 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
       alert(d?.bloqueados?.[0] ? `Não foi possível excluir ${d.bloqueados[0].nome}: ${d.bloqueados[0].motivo}.` : d?.message || "Erro ao excluir.");
     } finally {
       setExcluindo(false);
+    }
+  }
+
+  async function alternarHistorico() {
+    if (historico) return setHistorico(null);
+    setCarregandoHist(true);
+    try {
+      setHistorico(await historicoEndereco(detalhe.id));
+    } catch {
+      setHistorico([]);
+    } finally {
+      setCarregandoHist(false);
     }
   }
 
@@ -548,6 +564,41 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                     </button>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Histórico do endereço */}
+        <div className="border-t border-slate-100 px-5 py-3">
+          <button onClick={alternarHistorico} className="text-sm font-semibold text-indigo-600 hover:underline">
+            {carregandoHist ? "Carregando histórico..." : historico ? "Ocultar histórico" : "Ver histórico deste endereço"}
+          </button>
+          {historico && (
+            <div className="mt-2 max-h-56 overflow-y-auto">
+              {historico.length === 0 ? (
+                <p className="py-3 text-xs text-slate-400">Nenhuma alteração registrada ainda.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100 text-xs">
+                  {historico.map((h) => (
+                    <li key={h.id} className="flex items-start justify-between gap-3 py-1.5">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-slate-700">{h.produto}</div>
+                        <div className="text-slate-400">
+                          {h.data} · {h.tipo_label}
+                          {h.referencia && ` · ${h.referencia}`}
+                          {h.usuario && ` · ${h.usuario}`}
+                        </div>
+                      </div>
+                      <div className="whitespace-nowrap text-right">
+                        <span className="text-slate-500">{h.antes} → {h.depois}</span>{" "}
+                        <strong className={h.diferenca < 0 ? "text-rose-600" : "text-emerald-600"}>
+                          ({h.diferenca > 0 ? "+" : ""}{h.diferenca})
+                        </strong>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           )}

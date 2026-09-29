@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\InventoryCount;
 use App\Models\InventoryCountItem;
 use App\Models\Stock;
+use App\Support\Historico;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -217,7 +218,8 @@ class InventoryCountController extends Controller
                     ->first();
 
                 if ($stock && (float) $stock->quantidade !== (float) $item->qtd_contada) {
-                    $stock->update(['quantidade' => $item->qtd_contada]);
+                    Historico::com('contagem', "Contagem #{$count->id}",
+                        fn () => $stock->update(['quantidade' => $item->qtd_contada]), $count->descricao);
                     $ajustados++;
                 }
             }

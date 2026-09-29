@@ -135,8 +135,8 @@ export async function atualizarSaldoLocal(locationId, stockId, quantidade) {
 }
 
 /** Replica produtos (com quantidades) para um endereço. */
-export async function replicarParaLocal(locationId, itens) {
-  const { data } = await api.post(`/locations/${locationId}/replicar`, { itens });
+export async function replicarParaLocal(locationId, itens, origem = null) {
+  const { data } = await api.post(`/locations/${locationId}/replicar`, { itens, origem });
   return data;
 }
 
@@ -187,6 +187,18 @@ export async function statusMicrovix() {
 
 export async function relatorioProdutoLocalizacao(q) {
   const { data } = await api.get("/reports/produto-localizacao", { params: { q } });
+  return data.data ?? [];
+}
+
+/** Histórico de estoque (filtros: de, ate, produto, endereco, tipo, user_id, pagina). */
+export async function relatorioHistorico(filtros) {
+  const { data } = await api.get("/reports/historico", { params: filtros });
+  return data; // { data, total, pagina, tem_mais, tipos, usuarios }
+}
+
+/** Últimas alterações de saldo de um endereço. */
+export async function historicoEndereco(locationId) {
+  const { data } = await api.get(`/locations/${locationId}/historico`);
   return data.data ?? [];
 }
 
