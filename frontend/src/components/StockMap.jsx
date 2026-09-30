@@ -4,6 +4,7 @@ import { useAuth } from "../AuthContext";
 import LocationModal from "./LocationModal";
 import useAutoRefresh from "../hooks/useAutoRefresh";
 import AddressManager from "./AddressManager";
+import BuscaNoMapa from "./BuscaNoMapa";
 
 const LIMITE_BAIXO = 10;
 
@@ -34,6 +35,12 @@ export default function StockMap() {
   const [erro, setErro] = useState(null);
   const [selecionado, setSelecionado] = useState(null);
   const [gerenciar, setGerenciar] = useState(false);
+  // Produto buscado: o mapa destaca os endereços onde ele está.
+  const [destaque, setDestaque] = useState(null);
+  const locsDestaque = useMemo(
+    () => new Map((destaque?.localizacoes ?? []).map((l) => [l.location_id, l.quantidade])),
+    [destaque]
+  );
 
   async function carregar() {
     try {
@@ -102,6 +109,7 @@ export default function StockMap() {
           <p className="text-sm text-slate-400">{times.length} {alfabetica ? "ruas" : "times"} · {locations.length} endereços</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <BuscaNoMapa onSelecionar={setDestaque} />
           <Legenda />
           {(podeGerenciar || podeExcluir) && (
             <button onClick={() => setGerenciar(true)} className="btn-nuvem">
@@ -110,6 +118,33 @@ export default function StockMap() {
           )}
         </div>
       </div>
+
+      {destaque && (
+        <div className="card-nuvem mb-4 flex flex-wrap items-center justify-between gap-3 border border-indigo-200 p-4">
+          <div className="min-w-0">
+            <div className="truncate font-bold text-slate-800">{destaque.nome}</div>
+            <div className="font-mono text-xs text-slate-400">
+              cód. {destaque.codigo_microvix} · {destaque.total} un em {destaque.localizacoes.length} endereço(s)
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {destaque.localizacoes.map((l) => (
+                <button
+                  key={l.location_id}
+                  onClick={() => {
+                    const loc = locations.find((x) => x.id === l.location_id);
+                    if (loc) setSelecionado(loc);
+                  }}
+                  className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 px-3 py-1 text-xs font-bold text-white shadow-md shadow-indigo-500/30 transition hover:-translate-y-0.5"
+                >
+                  {l.endereco} · {l.quantidade}
+                </button>
+              ))}
+              {destaque.localizacoes.length === 0 && <span className="text-xs text-slate-400">sem saldo em nenhum endereço</span>}
+            </div>
+          </div>
+          <button onClick={() => setDestaque(null)} className="btn-ghost">Limpar busca</button>
+        </div>
+      )}
 
       <div className="card-nuvem overflow-hidden">
         <div className="overflow-x-auto">
@@ -138,14 +173,19 @@ export default function StockMap() {
                     if (!loc)
                       return <td key={p} className="px-1 py-1"><div className="h-9 rounded-lg border border-dashed border-slate-100" /></td>;
                     const q = Number(loc.total_quantidade || 0);
+                    const achado = destaque && locsDestaque.has(loc.id);
                     return (
                       <td key={p} className="px-1 py-1">
                         <button
                           onClick={() => setSelecionado(loc)}
-                          title={`${loc.nome} — ${q} un.`}
-                          className={`h-9 w-full rounded-lg text-sm font-bold shadow-sm transition hover:scale-[1.04] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-300 ${corDaCelula(q)}`}
+                          title={achado ? `${loc.nome} — ${locsDestaque.get(loc.id)} un. de ${destaque.nome}` : `${loc.nome} — ${q} un.`}
+                          className={`h-9 w-full rounded-lg text-sm font-bold shadow-sm transition hover:scale-[1.04] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-300 ${
+                            achado
+                              ? "scale-[1.06] bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/40 ring-2 ring-indigo-300"
+                              : `${corDaCelula(q)} ${destaque ? "opacity-25" : ""}`
+                          }`}
                         >
-                          {q}
+                          {achado ? locsDestaque.get(loc.id) : q}
                         </button>
                       </td>
                     );

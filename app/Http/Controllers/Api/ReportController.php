@@ -7,6 +7,7 @@ use App\Models\Location;
 use App\Models\Product;
 use App\Models\StockLog;
 use App\Models\User;
+use App\Services\BuscaProdutos;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -14,52 +15,47 @@ use Illuminate\Validation\Rule;
 class ReportController extends Controller
 {
     /**
-     * Relatório: Produto × Localização.
-     * Busca produto por código Microvix, código de barras ou descrição e
-     * retorna o total e a quantidade em cada endereço.
+     * Relatório: Produto × Localização (também usado pela busca do mapa).
+     * Busca por código Microvix, código de barras ou descrição, tolerante a
+     * erro: `data` = encontrados; `sugestoes` = parecidos ("você quis dizer").
      *
-     * GET /api/reports/produto-localizacao?q=...
+     * GET /api/reports/produto-localizacao?q=...   (perm relatorios)
+     * GET /api/products/buscar?q=...               (perm ver_mapa)
      */
-    public function produtoLocalizacao(Request $request): JsonResponse
+    public function produtoLocalizacao(Request $request, BuscaProdutos $busca): JsonResponse
     {
-        $q = trim((string) $request->query('q', ''));
+        $r = $busca->buscar((string) $request->query('q', ''));
 
-        if ($q === '') {
-            return response()->json(['data' => []]);
-        }
+        $formatar = function (array $item) {
+            /** @var Product $p */
+            $p = $item['product'];
+            $p->loadMissing('stocks.location');
+            $locs = $p->stocks
+                ->sortByDesc('quantidade')
+                ->map(fn ($s) => [
+                    'location_id' => $s->location_id,
+                    'endereco'    => $s->location?->nome,
+                    'time'        => $s->location?->corredor,
+                    'posicao'     => $s->location?->esteira,
+                    'quantidade'  => (float) $s->quantidade,
+                ])
+                ->values();
 
-        $produtos = Product::query()
-            ->where(function ($w) use ($q) {
-                $w->where('nome', 'like', "%{$q}%")
-                  ->orWhere('codigo_microvix', 'like', "%{$q}%")
-                  ->orWhere('codigo_barras', 'like', "%{$q}%");
-            })
-            ->whereHas('stocks')
-            ->with(['stocks.location'])
-            ->limit(50)
-            ->get()
-            ->map(function (Product $p) {
-                $locs = $p->stocks
-                    ->sortByDesc('quantidade')
-                    ->map(fn ($s) => [
-                        'endereco'   => $s->location?->nome,
-                        'time'       => $s->location?->corredor,
-                        'posicao'    => $s->location?->esteira,
-                        'quantidade' => (float) $s->quantidade,
-                    ])
-                    ->values();
+            return [
+                'product_id'      => $p->id,
+                'nome'            => $p->nome,
+                'codigo_microvix' => $p->codigo_microvix,
+                'codigo_barras'   => $p->codigo_barras,
+                'total'           => (float) $p->stocks->sum('quantidade'),
+                'localizacoes'    => $locs,
+                'semelhanca'      => $item['nota'],
+            ];
+        };
 
-                return [
-                    'product_id'      => $p->id,
-                    'nome'            => $p->nome,
-                    'codigo_microvix' => $p->codigo_microvix,
-                    'codigo_barras'   => $p->codigo_barras,
-                    'total'           => (float) $p->stocks->sum('quantidade'),
-                    'localizacoes'    => $locs,
-                ];
-            });
-
-        return response()->json(['data' => $produtos]);
+        return response()->json([
+            'data'      => $r['exatos']->map($formatar)->values(),
+            'sugestoes' => $r['parecidos']->map($formatar)->values(),
+        ]);
     }
 
     /**

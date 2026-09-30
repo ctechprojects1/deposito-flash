@@ -185,9 +185,16 @@ export async function statusMicrovix() {
 
 /* ===================== Relatórios ===================== */
 
+/** Busca tolerante a erro. Retorna { data: encontrados, sugestoes: parecidos }. */
 export async function relatorioProdutoLocalizacao(q) {
   const { data } = await api.get("/reports/produto-localizacao", { params: { q } });
-  return data.data ?? [];
+  return { data: data.data ?? [], sugestoes: data.sugestoes ?? [] };
+}
+
+/** Mesma busca, para o mapa (permissão ver_mapa). */
+export async function buscarProdutosMapa(q) {
+  const { data } = await api.get("/products/buscar", { params: { q } });
+  return { data: data.data ?? [], sugestoes: data.sugestoes ?? [] };
 }
 
 /** Histórico de estoque (filtros: de, ate, produto, endereco, tipo, user_id, pagina). */

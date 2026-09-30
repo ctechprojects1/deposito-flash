@@ -40,19 +40,28 @@ export default function ReportsScreen() {
 
 function ProdutoLocalizacao() {
   const [busca, setBusca] = useState("");
-  const [resultados, setResultados] = useState(null);
+  const [buscado, setBuscado] = useState("");
+  const [resultados, setResultados] = useState(null); // encontrados
+  const [sugestoes, setSugestoes] = useState([]); // parecidos
+  const [escolhida, setEscolhida] = useState(null); // sugestão aberta
   const [loading, setLoading] = useState(false);
 
   async function buscar(e) {
     e?.preventDefault();
     if (!busca.trim()) return;
     setLoading(true);
+    setEscolhida(null);
     try {
-      setResultados(await relatorioProdutoLocalizacao(busca.trim()));
+      const r = await relatorioProdutoLocalizacao(busca.trim());
+      setResultados(r.data);
+      setSugestoes(r.sugestoes);
+      setBuscado(busca.trim());
     } finally {
       setLoading(false);
     }
   }
+
+  const cards = escolhida ? [escolhida, ...(resultados ?? [])] : resultados ?? [];
 
   return (
     <div>
@@ -60,7 +69,7 @@ function ProdutoLocalizacao() {
         <input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por código Microvix, código de barras ou descrição..."
+          placeholder="Código Microvix, código de barras ou descrição (pode ser parte ou com erro)..."
           className="input-nuvem flex-1"
           autoFocus
         />
@@ -75,15 +84,48 @@ function ProdutoLocalizacao() {
         </p>
       )}
 
-      {resultados && resultados.length === 0 && (
-        <p className="py-8 text-center text-sm text-slate-400">Nenhum produto encontrado.</p>
+      {/* Parecidos: "você quis dizer?" */}
+      {resultados !== null && sugestoes.length > 0 && (
+        <div className={`card-nuvem mb-5 p-4 ${resultados.length === 0 ? "border border-amber-200 bg-amber-50/60" : ""}`}>
+          <div className="mb-2 text-sm font-bold text-slate-700">
+            {resultados.length === 0 ? (
+              <>Nada exato para “{buscado}”. Você quis dizer:</>
+            ) : (
+              <>Também parecidos com “{buscado}”:</>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {sugestoes
+              .filter((p) => p.product_id !== escolhida?.product_id)
+              .map((p) => (
+                <button
+                  key={p.product_id}
+                  onClick={() => setEscolhida(p)}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-slate-800">{p.nome}</span>
+                    <span className="font-mono text-xs text-slate-400">cód. {p.codigo_microvix}{p.codigo_barras && ` · barras ${p.codigo_barras}`}</span>
+                  </span>
+                  <span className="whitespace-nowrap text-xs font-semibold text-indigo-600">{p.total} un · ver</span>
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {resultados && resultados.length === 0 && sugestoes.length === 0 && (
+        <p className="py-8 text-center text-sm text-slate-400">Nenhum produto encontrado, nem parecido.</p>
       )}
 
       <div className="space-y-4">
-        {(resultados ?? []).map((p) => (
-          <div key={p.product_id} className="card-nuvem p-5">
+        {cards.map((p) => (
+          <div key={p.product_id} className={`card-nuvem p-5 ${p === escolhida ? "ring-2 ring-amber-300" : ""}`}>
             <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
+                {p === escolhida && (
+                  <span className="mb-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">sugestão escolhida</span>
+                )}
                 <h3 className="text-lg font-bold text-slate-800">{p.nome}</h3>
                 <div className="flex flex-wrap gap-x-3 font-mono text-xs text-slate-400">
                   {p.codigo_microvix && <span>MVX: {p.codigo_microvix}</span>}
