@@ -140,7 +140,10 @@ function CardSolicitacao({ s, onAbrir }) {
 
       <div className="mt-3">
         <div className="mb-1 flex justify-between text-xs text-slate-500">
-          <span>{s.itens_retirados} de {s.total_itens} retirado(s)</span>
+          <span>
+            {s.itens_retirados} de {s.total_itens} resolvido(s)
+            {s.itens_nao_separados > 0 && <span className="ml-1 font-semibold text-amber-700">· {s.itens_nao_separados} não sep.</span>}
+          </span>
           <span>{pct}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -289,7 +292,10 @@ function Checklist({ id, onVoltar }) {
 
         <div className="mt-4">
           <div className="mb-1 flex justify-between text-xs text-slate-500">
-            <span>{s.itens_retirados} de {s.total_itens} retirado(s)</span>
+            <span>
+              {s.itens_retirados} de {s.total_itens} resolvido(s)
+              {s.itens_nao_separados > 0 && <span className="ml-1 font-semibold text-amber-700">· {s.itens_nao_separados} não separado(s)</span>}
+            </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-100">
             <div
@@ -345,9 +351,14 @@ function Checklist({ id, onVoltar }) {
             <button
               className="btn-ok"
               disabled={!tudoMarcado}
-              title={tudoMarcado ? "" : "Marque todos os itens como retirados"}
+              title={tudoMarcado ? "" : "Marque cada item como retirado ou como não separado"}
               onClick={() => {
-                if (!window.confirm("Finalizar a separação? O estoque dos itens será baixado e só um administrador poderá reabrir.")) return;
+                const aviso = s.itens_nao_separados
+                  ? `
+
+${s.itens_nao_separados} item(ns) marcado(s) como NÃO separado(s) ficam registrados com o motivo e não têm baixa.`
+                  : "";
+                if (!window.confirm(`Finalizar a separação? O estoque dos itens retirados será baixado e só um administrador poderá reabrir.${aviso}`)) return;
                 executar("Finalizando e baixando o estoque...", async () => {
                   const r = await finalizarSeparacao(id);
                   setS(r.data);
@@ -382,82 +393,184 @@ function Checklist({ id, onVoltar }) {
   );
 }
 
+// Motivos prontos para "não separado" (chips) — "Outro" pede texto.
+const MOTIVOS_NAO_SEPARADO = [
+  "Sem estoque no depósito",
+  "Não encontrado no endereço",
+  "Enviado incorretamente na solicitação",
+  "Produto avariado",
+  "Outro",
+];
+
 function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividir }) {
   const marcado = item.retirado;
+  const naoSep = item.nao_separado;
   const localEscolhido = item.locais.find((l) => l.location_id === item.location_id);
-  const semSaldo = !concluida && localEscolhido && localEscolhido.quantidade < item.quantidade_solicitada;
+  const semSaldo = !concluida && !naoSep && localEscolhido && localEscolhido.quantidade < item.quantidade_solicitada;
+  const semEndereco = !item.location_id;
+
+  const [justificando, setJustificando] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [detalhe, setDetalhe] = useState("");
+
+  function abrirJustificativa() {
+    setMotivo(semEndereco ? "Sem estoque no depósito" : "");
+    setDetalhe("");
+    setJustificando(true);
+  }
+
+  function confirmarNaoSeparado() {
+    const texto = motivo === "Outro" ? detalhe.trim() : [motivo, detalhe.trim()].filter(Boolean).join(" — ");
+    if (!texto) return;
+    onAlterar({ nao_separado: true, motivo_nao_separado: texto });
+    setJustificando(false);
+  }
+
+  const podeConfirmar = motivo && (motivo !== "Outro" || detalhe.trim());
 
   return (
-    <div className={`flex flex-wrap items-center gap-3 p-3 transition ${marcado ? "bg-emerald-50/60" : ""} ${ocupado ? "opacity-60" : ""}`}>
-      <button
-        disabled={!editavel || ocupado}
-        onClick={() => onAlterar({ retirado: !marcado })}
-        title={marcado ? "Desmarcar" : "Marcar como retirado"}
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition disabled:cursor-not-allowed ${
-          marcado ? "border-emerald-500 bg-gradient-to-r from-emerald-400 to-teal-500 text-white" : "border-slate-300 bg-white"
-        }`}
-      >
-        {marcado && (
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-          </svg>
-        )}
-      </button>
+    <div className={`p-3 transition ${marcado ? "bg-emerald-50/60" : naoSep ? "bg-amber-50/70" : ""} ${ocupado ? "opacity-60" : ""}`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          disabled={!editavel || ocupado || (semEndereco && !marcado)}
+          onClick={() => onAlterar({ retirado: !marcado })}
+          title={
+            semEndereco && !marcado
+              ? "Sem endereço com estoque: escolha um endereço ou marque como não separado"
+              : marcado
+                ? "Desmarcar"
+                : "Marcar como retirado"
+          }
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition disabled:cursor-not-allowed ${
+            marcado
+              ? "border-emerald-500 bg-gradient-to-r from-emerald-400 to-teal-500 text-white"
+              : naoSep
+                ? "border-amber-400 bg-gradient-to-r from-amber-300 to-orange-400 text-white"
+                : "border-slate-300 bg-white disabled:bg-slate-100"
+          }`}
+        >
+          {marcado && (
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          {naoSep && <span className="text-sm font-black leading-none">!</span>}
+        </button>
 
-      <div className="min-w-0 flex-1">
-        <div className={`truncate text-sm font-medium ${marcado ? "text-slate-500 line-through" : "text-slate-800"}`}>
-          {item.produto || item.descricao_documento}
+        <div className="min-w-0 flex-1">
+          <div className={`truncate text-sm font-medium ${marcado ? "text-slate-500 line-through" : naoSep ? "text-slate-500" : "text-slate-800"}`}>
+            {item.produto || item.descricao_documento}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs text-slate-400">cód. {item.codigo_microvix}</span>
+            {item.partes > 1 && (
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600">
+                parte {item.parte} de {item.partes}
+              </span>
+            )}
+          </div>
+          {naoSep && (
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">Não separado</span>
+              <span className="text-amber-800">{item.motivo_nao_separado}</span>
+              {editavel && (
+                <button onClick={() => onAlterar({ nao_separado: false })} disabled={ocupado} className="font-semibold text-indigo-600 hover:underline">
+                  desfazer
+                </button>
+              )}
+            </div>
+          )}
+          {editavel && !marcado && !naoSep && !justificando && (
+            <button onClick={abrirJustificativa} disabled={ocupado} className="mt-1 text-xs font-semibold text-amber-700 hover:underline">
+              Não encontrado / não separar
+            </button>
+          )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-xs text-slate-400">cód. {item.codigo_microvix}</span>
-          {item.partes > 1 && (
-            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600">
-              parte {item.parte} de {item.partes}
-            </span>
+
+        <div className="w-44">
+          <div className="text-[11px] text-slate-500">Endereço</div>
+          {editavel && !marcado && !naoSep && item.locais.length > 0 ? (
+            <select
+              value={item.location_id ?? ""}
+              disabled={ocupado}
+              onChange={(e) => onAlterar({ location_id: e.target.value ? Number(e.target.value) : null })}
+              className="w-full rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            >
+              {!item.location_id && <option value="">Escolha...</option>}
+              {item.locais.map((l) => (
+                <option key={l.location_id} value={l.location_id}>
+                  {l.nome} ({l.quantidade})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="text-sm font-bold text-indigo-700">{item.endereco || "—"}</div>
+          )}
+          {semEndereco && !naoSep && !concluida && item.locais.length === 0 && (
+            <div className="mt-0.5 text-[11px] font-semibold text-rose-600">sem estoque no depósito</div>
+          )}
+          {semSaldo && <div className="mt-0.5 text-[11px] text-amber-600">saldo {localEscolhido.quantidade} no endereço</div>}
+          {semSaldo && editavel && !marcado && (
+            <button
+              onClick={onDividir}
+              disabled={ocupado}
+              className="mt-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-3 py-1 text-[11px] font-bold text-white shadow-md shadow-orange-500/30 transition hover:-translate-y-0.5 disabled:opacity-60"
+            >
+              Completar com outro endereço
+            </button>
+          )}
+        </div>
+
+        <div className="w-16 text-right">
+          <div className="text-[11px] text-slate-500">{concluida ? "baixado" : "retirar"}</div>
+          <div className={`text-lg font-extrabold ${naoSep ? "text-slate-400 line-through" : "text-slate-800"}`}>
+            {concluida ? item.quantidade_separada : item.quantidade_solicitada}
+          </div>
+          {item.quantidade_documento > 0 && item.quantidade_documento !== item.quantidade_solicitada && (
+            <div className="text-[11px] text-slate-400">nota: {item.quantidade_documento}</div>
           )}
         </div>
       </div>
 
-      <div className="w-44">
-        <div className="text-[11px] text-slate-500">Endereço</div>
-        {editavel && !marcado ? (
-          <select
-            value={item.location_id ?? ""}
-            disabled={ocupado}
-            onChange={(e) => onAlterar({ location_id: e.target.value ? Number(e.target.value) : null })}
-            className="w-full rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
-          >
-            {!item.location_id && <option value="">Escolha...</option>}
-            {item.locais.map((l) => (
-              <option key={l.location_id} value={l.location_id}>
-                {l.nome} ({l.quantidade})
-              </option>
+      {/* Justificativa de "não separado" */}
+      {justificando && (
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+          <div className="mb-2 text-xs font-bold text-amber-800">Por que este item não será separado?</div>
+          <div className="flex flex-wrap gap-1.5">
+            {MOTIVOS_NAO_SEPARADO.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMotivo(m)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  motivo === m
+                    ? "bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-md shadow-orange-500/30"
+                    : "bg-white text-slate-600 shadow-sm hover:bg-amber-100"
+                }`}
+              >
+                {m}
+              </button>
             ))}
-          </select>
-        ) : (
-          <div className="text-sm font-bold text-indigo-700">{item.endereco || "—"}</div>
-        )}
-        {semSaldo && <div className="mt-0.5 text-[11px] text-amber-600">saldo {localEscolhido.quantidade} no endereço</div>}
-        {semSaldo && editavel && !marcado && (
-          <button
-            onClick={onDividir}
-            disabled={ocupado}
-            className="mt-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-3 py-1 text-[11px] font-bold text-white shadow-md shadow-orange-500/30 transition hover:-translate-y-0.5 disabled:opacity-60"
-          >
-            Completar com outro endereço
-          </button>
-        )}
-      </div>
-
-      <div className="w-16 text-right">
-        <div className="text-[11px] text-slate-500">{concluida ? "baixado" : "retirar"}</div>
-        <div className="text-lg font-extrabold text-slate-800">
-          {concluida ? item.quantidade_separada : item.quantidade_solicitada}
+          </div>
+          <input
+            value={detalhe}
+            onChange={(e) => setDetalhe(e.target.value)}
+            maxLength={200}
+            placeholder={motivo === "Outro" ? "Descreva o motivo (obrigatório)" : "Observação (opcional)"}
+            className="mt-2 w-full rounded-xl border border-amber-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <button onClick={() => setJustificando(false)} className="btn-ghost px-3 py-1.5 text-xs">Cancelar</button>
+            <button
+              onClick={confirmarNaoSeparado}
+              disabled={!podeConfirmar || ocupado}
+              className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-1.5 text-xs font-bold text-white shadow-md shadow-orange-500/30 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+            >
+              Marcar como não separado
+            </button>
+          </div>
         </div>
-        {item.quantidade_documento > 0 && item.quantidade_documento !== item.quantidade_solicitada && (
-          <div className="text-[11px] text-slate-400">nota: {item.quantidade_documento}</div>
-        )}
-      </div>
+      )}
     </div>
   );
 }

@@ -24,6 +24,8 @@ class WithdrawalItem extends Model
         'quantidade_separada',
         'retirado',
         'retirado_em',
+        'nao_separado',
+        'motivo_nao_separado',
     ];
 
     protected function casts(): array
@@ -34,6 +36,7 @@ class WithdrawalItem extends Model
             'quantidade_separada'   => 'decimal:2',
             'retirado'              => 'boolean',
             'retirado_em'           => 'datetime',
+            'nao_separado'          => 'boolean',
         ];
     }
 

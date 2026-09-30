@@ -162,7 +162,9 @@ class WithdrawalRequestController extends Controller
             ->when($status !== 'todas', fn ($q) => $q->whereIn('status', explode(',', $status)))
             ->withCount([
                 'items',
-                'items as itens_retirados' => fn ($q) => $q->where('retirado', true),
+                // Resolvidos = retirados + marcados como não separados.
+                'items as itens_retirados' => fn ($q) => $q->where(fn ($w) => $w->where('retirado', true)->orWhere('nao_separado', true)),
+                'items as itens_nao_separados' => fn ($q) => $q->where('nao_separado', true),
             ])
             ->with(['solicitante', 'separador'])
             ->latest()
@@ -239,16 +241,37 @@ class WithdrawalRequestController extends Controller
         }
 
         $dados = $request->validate([
-            'retirado'    => ['sometimes', 'boolean'],
-            'location_id' => ['sometimes', 'nullable', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())->whereNull('deleted_at')],
+            'retirado'            => ['sometimes', 'boolean'],
+            'location_id'         => ['sometimes', 'nullable', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())->whereNull('deleted_at')],
+            'nao_separado'        => ['sometimes', 'boolean'],
+            'motivo_nao_separado' => ['required_if_accepted:nao_separado', 'nullable', 'string', 'max:255'],
+        ], [
+            'motivo_nao_separado.required_if_accepted' => 'Informe o motivo de o item não ter sido separado.',
         ]);
 
         if (array_key_exists('location_id', $dados)) {
             $item->location_id = $dados['location_id'];
         }
         if (array_key_exists('retirado', $dados)) {
+            if ($dados['retirado'] && ! $item->location_id) {
+                return response()->json([
+                    'message' => 'Este item não tem endereço com estoque. Escolha um endereço ou marque como "Não separado".',
+                ], 422);
+            }
             $item->retirado = $dados['retirado'];
             $item->retirado_em = $dados['retirado'] ? now() : null;
+            if ($dados['retirado']) {
+                $item->nao_separado = false;
+                $item->motivo_nao_separado = null;
+            }
+        }
+        if (array_key_exists('nao_separado', $dados)) {
+            $item->nao_separado = $dados['nao_separado'];
+            $item->motivo_nao_separado = $dados['nao_separado'] ? trim($dados['motivo_nao_separado']) : null;
+            if ($dados['nao_separado']) {
+                $item->retirado = false;
+                $item->retirado_em = null;
+            }
         }
         $item->save();
 
@@ -329,17 +352,18 @@ class WithdrawalRequestController extends Controller
             return response()->json(['message' => 'Só dá para finalizar uma separação em andamento.'], 409);
         }
 
-        $faltando = $s->items->where('retirado', false)->count();
+        $faltando = $s->items->filter(fn ($i) => ! $i->retirado && ! $i->nao_separado)->count();
         if ($faltando > 0) {
-            return response()->json(['message' => "Ainda há {$faltando} item(ns) sem check de retirado."], 422);
+            return response()->json(['message' => "Ainda há {$faltando} item(ns) sem check de retirado (ou marque como não separado)."], 422);
         }
-        if ($semEndereco = $s->items->firstWhere('location_id', null)) {
+        $retirados = $s->items->where('retirado', true);
+        if ($semEndereco = $retirados->firstWhere('location_id', null)) {
             return response()->json(['message' => "Defina o endereço de retirada de: {$semEndereco->product?->nome}."], 422);
         }
 
         try {
-            DB::transaction(function () use ($s, $stock) {
-                foreach ($s->items as $item) {
+            DB::transaction(function () use ($s, $stock, $retirados) {
+                foreach ($retirados as $item) {
                     $qtd = (float) $item->quantidade_solicitada;
                     try {
                         Historico::com('separacao', "Solicitação #{$s->id}",
@@ -515,6 +539,7 @@ class WithdrawalRequestController extends Controller
             'separador'        => $s->separador?->name,
             'total_itens'      => (int) ($s->items_count ?? 0),
             'itens_retirados'  => (int) ($s->itens_retirados ?? 0),
+            'itens_nao_separados' => (int) ($s->itens_nao_separados ?? 0),
             'criada_em'        => $s->created_at?->format('d/m/Y H:i'),
             'finalizada_em'    => $s->finalizada_em?->format('d/m/Y H:i'),
         ];
@@ -556,6 +581,8 @@ class WithdrawalRequestController extends Controller
                 'endereco'              => $i->location?->nome,
                 'locais'                => $locais,
                 'retirado'              => (bool) $i->retirado,
+                'nao_separado'          => (bool) $i->nao_separado,
+                'motivo_nao_separado'   => $i->motivo_nao_separado,
                 'parte'                 => $ordem[$i->product_id],
                 'partes'                => $partes[$i->product_id],
             ];
@@ -568,7 +595,8 @@ class WithdrawalRequestController extends Controller
             'reaberta_em'     => $s->reaberta_em?->format('d/m/Y H:i'),
             'reaberta_por'    => $s->reabertaPor?->name,
             'total_itens'     => $itens->count(),
-            'itens_retirados' => $itens->where('retirado', true)->count(),
+            'itens_retirados' => $itens->filter(fn ($i) => $i['retirado'] || $i['nao_separado'])->count(),
+            'itens_nao_separados' => $itens->where('nao_separado', true)->count(),
             'itens'           => $itens,
         ]);
     }
