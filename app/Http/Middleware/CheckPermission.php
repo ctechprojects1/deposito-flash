@@ -16,7 +16,10 @@ class CheckPermission
     {
         $user = $request->user();
 
-        if (! $user || ! $user->can2($permissao)) {
+        // "perm:ver_mapa|movimentar" = basta ter uma delas.
+        $ok = $user && collect(explode('|', $permissao))->contains(fn ($p) => $user->can2($p));
+
+        if (! $ok) {
             return response()->json([
                 'message' => 'Você não tem permissão para esta ação.',
             ], 403);

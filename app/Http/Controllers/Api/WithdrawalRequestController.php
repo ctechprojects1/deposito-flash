@@ -7,6 +7,7 @@ use App\Models\Deposito;
 use App\Models\Product;
 use App\Models\WithdrawalItem;
 use App\Models\WithdrawalRequest;
+use App\Services\BuscaProdutos;
 use App\Services\NotaExtractorService;
 use App\Services\StockService;
 use App\Support\Historico;
@@ -35,7 +36,7 @@ class WithdrawalRequestController extends Controller
      * Lê o PDF da nota/pedido e devolve os itens cruzados com o depósito.
      * POST /api/withdrawal-requests/extrair  (multipart: documento)
      */
-    public function extrair(Request $request, NotaExtractorService $extrator): JsonResponse
+    public function extrair(Request $request, NotaExtractorService $extrator, BuscaProdutos $busca): JsonResponse
     {
         $request->validate(['documento' => self::REGRA_PDF], [
             'documento.mimes' => 'Envie a nota ou o pedido em PDF.',
@@ -49,7 +50,17 @@ class WithdrawalRequestController extends Controller
             return response()->json(['message' => $lido['erro']], 422);
         }
 
-        $itens = array_map(fn ($it) => $this->cruzarComDeposito($it), $lido['itens']);
+        $itens = array_map(function ($it) use ($busca) {
+            $item = $this->cruzarComDeposito($it);
+            // Não bateu o código: sugere os parecidos do depósito para vincular.
+            $item['sugestoes'] = $item['no_deposito'] ? [] : $busca
+                ->sugerirParaItem((string) $it['codigo'], (string) $it['descricao'])
+                ->map(fn ($x) => $busca->formatar($x))
+                ->values()
+                ->all();
+
+            return $item;
+        }, $lido['itens']);
 
         return response()->json([
             'data' => [

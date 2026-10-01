@@ -4,7 +4,7 @@ import { useAuth } from "../AuthContext";
 import LocationModal from "./LocationModal";
 import useAutoRefresh from "../hooks/useAutoRefresh";
 import AddressManager from "./AddressManager";
-import BuscaNoMapa from "./BuscaNoMapa";
+import BuscaProduto from "./BuscaProduto";
 
 const LIMITE_BAIXO = 10;
 
@@ -109,7 +109,7 @@ export default function StockMap() {
           <p className="text-sm text-slate-400">{times.length} {alfabetica ? "ruas" : "times"} · {locations.length} endereços</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <BuscaNoMapa onSelecionar={setDestaque} />
+          <BuscaProduto onSelecionar={setDestaque} placeholder="Buscar produto no mapa (código ou descrição)" alinhar="right" />
           <Legenda />
           {(podeGerenciar || podeExcluir) && (
             <button onClick={() => setGerenciar(true)} className="btn-nuvem">

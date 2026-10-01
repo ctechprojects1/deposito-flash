@@ -26,35 +26,9 @@ class ReportController extends Controller
     {
         $r = $busca->buscar((string) $request->query('q', ''));
 
-        $formatar = function (array $item) {
-            /** @var Product $p */
-            $p = $item['product'];
-            $p->loadMissing('stocks.location');
-            $locs = $p->stocks
-                ->sortByDesc('quantidade')
-                ->map(fn ($s) => [
-                    'location_id' => $s->location_id,
-                    'endereco'    => $s->location?->nome,
-                    'time'        => $s->location?->corredor,
-                    'posicao'     => $s->location?->esteira,
-                    'quantidade'  => (float) $s->quantidade,
-                ])
-                ->values();
-
-            return [
-                'product_id'      => $p->id,
-                'nome'            => $p->nome,
-                'codigo_microvix' => $p->codigo_microvix,
-                'codigo_barras'   => $p->codigo_barras,
-                'total'           => (float) $p->stocks->sum('quantidade'),
-                'localizacoes'    => $locs,
-                'semelhanca'      => $item['nota'],
-            ];
-        };
-
         return response()->json([
-            'data'      => $r['exatos']->map($formatar)->values(),
-            'sugestoes' => $r['parecidos']->map($formatar)->values(),
+            'data'      => $r['exatos']->map(fn ($x) => $busca->formatar($x))->values(),
+            'sugestoes' => $r['parecidos']->map(fn ($x) => $busca->formatar($x))->values(),
         ]);
     }
 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { extrairDocumento, criarSolicitacao } from "../services/api";
+import BuscaProduto from "./BuscaProduto";
 
 const TIPOS = { pedido: "Pedido de venda", nfe: "NF-e", documento_interno: "Documento interno" };
 
@@ -42,6 +43,42 @@ export default function RequestForm() {
     }
   }
 
+  /**
+   * Item da nota que não bateu com o depósito (SKU diferente/errado): o
+   * operador escolhe o produto certo do depósito (sugestão ou busca).
+   */
+  function vincular(codigo, produto) {
+    const item = doc.itens.find((it) => it.codigo === codigo);
+    const original = item.original ?? item;
+    setDoc((d) => ({
+      ...d,
+      itens: d.itens.map((it) =>
+        it.codigo !== codigo
+          ? it
+          : {
+              ...original,
+              original,
+              vinculado: true,
+              no_deposito: true,
+              product_id: produto.product_id,
+              nome_deposito: produto.nome,
+              codigo_deposito: produto.codigo_microvix,
+              estoque_total: produto.total,
+              locais: produto.localizacoes
+                .map((l) => ({ location_id: l.location_id, nome: l.endereco, quantidade: l.quantidade }))
+                .sort((a, b) => a.quantidade - b.quantidade),
+            }
+      ),
+    }));
+    const qtd = produto.total > 0 ? Math.min(original.quantidade, produto.total) : original.quantidade;
+    setSel((s) => ({ ...s, [codigo]: { marcado: true, quantidade: String(qtd) } }));
+  }
+
+  function desvincular(codigo) {
+    setDoc((d) => ({ ...d, itens: d.itens.map((it) => (it.codigo === codigo && it.original ? it.original : it)) }));
+    setSel((s) => ({ ...s, [codigo]: { ...s[codigo], marcado: false } }));
+  }
+
   function recomecar() {
     setDoc(null);
     setSel({});
@@ -78,7 +115,7 @@ export default function RequestForm() {
         anexo_nota: arquivo,
         itens: marcados.map((it) => ({
           product_id: it.product_id,
-          codigo_microvix: it.codigo,
+          codigo_microvix: it.codigo_deposito ?? it.codigo,
           descricao: it.descricao,
           quantidade_documento: it.quantidade,
           quantidade_solicitada: Number(sel[it.codigo].quantidade),
@@ -165,6 +202,8 @@ export default function RequestForm() {
                 item={it}
                 estado={sel[it.codigo]}
                 onChange={(patch) => setSel((s) => ({ ...s, [it.codigo]: { ...s[it.codigo], ...patch } }))}
+                onVincular={(produto) => vincular(it.codigo, produto)}
+                onDesvincular={() => desvincular(it.codigo)}
               />
             ))}
           </div>
@@ -205,7 +244,7 @@ function alocar(locais, qtd) {
   return partes;
 }
 
-function LinhaChecklist({ item, estado, onChange }) {
+function LinhaChecklist({ item, estado, onChange, onVincular, onDesvincular }) {
   const marcado = !!estado?.marcado;
   const qtd = Number(estado?.quantidade);
   const invalida = marcado && (!(qtd > 0) || qtd > item.quantidade);
@@ -213,17 +252,7 @@ function LinhaChecklist({ item, estado, onChange }) {
   const partes = alocar(item.locais, qtd || 0);
 
   if (!item.no_deposito) {
-    return (
-      <div className="flex items-center gap-3 p-3 opacity-50">
-        <span className="h-7 w-7 shrink-0 rounded-full border-2 border-dashed border-slate-300" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm text-slate-700">{item.descricao}</div>
-          <div className="font-mono text-xs text-slate-400">cód. {item.codigo}</div>
-        </div>
-        <span className="text-xs text-slate-500">{item.quantidade} un</span>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">não está no depósito</span>
-      </div>
-    );
+    return <LinhaNaoEncontrada item={item} onVincular={onVincular} />;
   }
 
   return (
@@ -245,6 +274,14 @@ function LinhaChecklist({ item, estado, onChange }) {
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-slate-800">{item.descricao}</div>
         <div className="font-mono text-xs text-slate-400">cód. {item.codigo}</div>
+        {item.vinculado && (
+          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">
+              vinculado: {item.nome_deposito} (cód. {item.codigo_deposito})
+            </span>
+            <button onClick={onDesvincular} className="font-semibold text-indigo-600 hover:underline">desfazer</button>
+          </div>
+        )}
         <div className="text-xs text-slate-500">
           Depósito: {item.estoque_total} un
           {partes.length > 0 && " · retirar de " + partes.map((p) => `${p.nome} (${p.quantidade})`).join(" + ")}
@@ -272,6 +309,61 @@ function LinhaChecklist({ item, estado, onChange }) {
         />
         {invalida && <div className="mt-0.5 text-[11px] text-rose-600">máx. {item.quantidade}</div>}
         {!invalida && semSaldo && <div className="mt-0.5 text-[11px] text-amber-600">saldo {item.estoque_total}</div>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Item da nota que não bateu com nenhum produto do depósito: mostra os
+ * parecidos (SKU com erro, código diferente, descrição) para vincular,
+ * ou deixa procurar manualmente.
+ */
+function LinhaNaoEncontrada({ item, onVincular }) {
+  const [procurando, setProcurando] = useState(false);
+  const sugestoes = item.sugestoes ?? [];
+
+  return (
+    <div className="p-3">
+      <div className="flex items-center gap-3">
+        <span className="h-7 w-7 shrink-0 rounded-full border-2 border-dashed border-slate-300" />
+        <div className="min-w-0 flex-1 opacity-60">
+          <div className="truncate text-sm text-slate-700">{item.descricao}</div>
+          <div className="font-mono text-xs text-slate-400">cód. {item.codigo}</div>
+        </div>
+        <span className="text-xs text-slate-500">{item.quantidade} un</span>
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">não está no depósito</span>
+      </div>
+
+      <div className="ml-10 mt-2 flex flex-wrap items-center gap-1.5">
+        {sugestoes.length > 0 && <span className="text-xs font-semibold text-amber-700">Parecidos no depósito:</span>}
+        {sugestoes.map((p) => (
+          <button
+            key={p.product_id}
+            onClick={() => onVincular(p)}
+            title="Usar este produto do depósito"
+            className="rounded-full bg-white px-3 py-1 text-left text-xs shadow-sm ring-1 ring-amber-200 transition hover:-translate-y-0.5 hover:bg-amber-50"
+          >
+            <span className="font-semibold text-slate-700">{p.nome}</span>
+            <span className="ml-1 font-mono text-slate-400">cód. {p.codigo_microvix}</span>
+            <span className="ml-1 font-bold text-indigo-600">{p.total} un</span>
+          </button>
+        ))}
+        {!procurando ? (
+          <button onClick={() => setProcurando(true)} className="text-xs font-semibold text-indigo-600 hover:underline">
+            {sugestoes.length ? "procurar outro" : "procurar no depósito"}
+          </button>
+        ) : (
+          <BuscaProduto
+            className="w-full sm:w-96"
+            autoFocus
+            placeholder="Código ou descrição do produto no depósito..."
+            onSelecionar={(p) => {
+              setProcurando(false);
+              onVincular(p);
+            }}
+          />
+        )}
       </div>
     </div>
   );

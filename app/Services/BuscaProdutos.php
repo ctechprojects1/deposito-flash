@@ -38,9 +38,7 @@ class BuscaProdutos
         $tokens = array_values(array_filter(explode(' ', $t), fn ($x) => $x !== ''));
         $codigoBusca = preg_replace('/\s+/', '', $t);
 
-        $notas = Product::query()
-            ->whereHas('stocks')
-            ->get(['id', 'nome', 'codigo_microvix', 'codigo_barras'])
+        $notas = $this->candidatos()
             ->map(fn (Product $p) => ['product' => $p, 'nota' => $this->nota($p, $t, $tokens, $codigoBusca)])
             ->filter(fn ($r) => $r['nota'] >= self::NOTA_MINIMA)
             ->sortByDesc('nota')
@@ -50,6 +48,60 @@ class BuscaProdutos
             'exatos'    => $notas->filter(fn ($r) => $r['nota'] >= self::NOTA_EXATA)->take($maxExatos)->values(),
             'parecidos' => $notas->filter(fn ($r) => $r['nota'] < self::NOTA_EXATA)->take($maxParecidos)->values(),
         ];
+    }
+
+    /**
+     * Para um item da nota que não bateu com o depósito: os produtos mais
+     * parecidos pelo código e pela descrição (no máximo $max).
+     */
+    public function sugerirParaItem(string $codigo, string $descricao, int $max = 3): Collection
+    {
+        $todos = collect();
+        foreach ([$codigo, $descricao] as $termo) {
+            $r = $this->buscar($termo, $max, $max);
+            $todos = $todos->merge($r['exatos'])->merge($r['parecidos']);
+        }
+
+        return $todos->sortByDesc('nota')->unique(fn ($r) => $r['product']->id)->take($max)->values();
+    }
+
+    /** Formato usado pelas telas (mapa, relatório, solicitação, movimentação). */
+    public function formatar(array $item): array
+    {
+        /** @var Product $p */
+        $p = $item['product'];
+        $p->loadMissing('stocks.location');
+        $locs = $p->stocks
+            ->where('quantidade', '>', 0)
+            ->sortByDesc('quantidade')
+            ->map(fn ($s) => [
+                'location_id' => $s->location_id,
+                'endereco'    => $s->location?->nome,
+                'time'        => $s->location?->corredor,
+                'posicao'     => $s->location?->esteira,
+                'quantidade'  => (float) $s->quantidade,
+            ])
+            ->values();
+
+        return [
+            'product_id'      => $p->id,
+            'nome'            => $p->nome,
+            'codigo_microvix' => $p->codigo_microvix,
+            'codigo_barras'   => $p->codigo_barras,
+            'total'           => (float) $p->stocks->sum('quantidade'),
+            'localizacoes'    => $locs,
+            'semelhanca'      => $item['nota'],
+        ];
+    }
+
+    private ?Collection $cacheCandidatos = null;
+
+    /** Produtos com estoque no CD atual (carregados uma vez por requisição). */
+    private function candidatos(): Collection
+    {
+        return $this->cacheCandidatos ??= Product::query()
+            ->whereHas('stocks')
+            ->get(['id', 'nome', 'codigo_microvix', 'codigo_barras']);
     }
 
     private function nota(Product $p, string $t, array $tokens, string $codigoBusca): int

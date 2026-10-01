@@ -4,6 +4,7 @@ import {
   criarMovimentacao,
   fetchMovimentacoes,
 } from "../services/api";
+import BuscaProduto from "./BuscaProduto";
 
 export default function MovementScreen() {
   const [modo, setModo] = useState("nova"); // "nova" | "relatorio"
@@ -48,6 +49,14 @@ function FormMovimentacao() {
   const [motivo, setMotivo] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  // Atalho: buscar o produto (tolerante a SKU errado) e escolher de onde sai.
+  const [produtoBuscado, setProdutoBuscado] = useState(null);
+
+  function usarEndereco(loc) {
+    setOrigemId(String(loc.location_id));
+    setProductId(String(produtoBuscado.product_id));
+    if (String(destinoId) === String(loc.location_id)) setDestinoId("");
+  }
 
   async function carregarLocais() {
     try {
@@ -90,6 +99,7 @@ function FormMovimentacao() {
       setQuantidade("");
       setMotivo("");
       setDestinoId("");
+      setProdutoBuscado(null);
       await carregarLocais(); // atualiza saldos
       setOrigemId("");
     } catch (err) {
@@ -110,6 +120,48 @@ function FormMovimentacao() {
           {feedback.texto}
         </div>
       )}
+
+      {/* Buscar pelo produto */}
+      <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4">
+        <label className="mb-1 block text-sm font-semibold text-slate-700">
+          Buscar pelo produto <span className="font-normal text-slate-400">(opcional — aceita código incompleto ou digitado errado)</span>
+        </label>
+        <BuscaProduto className="w-full" onSelecionar={setProdutoBuscado} placeholder="Código Microvix, barras ou descrição..." />
+        {produtoBuscado && (
+          <div className="mt-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-bold text-slate-800">{produtoBuscado.nome}</div>
+                <div className="font-mono text-xs text-slate-400">cód. {produtoBuscado.codigo_microvix} · {produtoBuscado.total} un no CD</div>
+              </div>
+              <button type="button" onClick={() => setProdutoBuscado(null)} className="text-xs font-semibold text-slate-400 hover:text-slate-600">
+                limpar
+              </button>
+            </div>
+            <div className="mt-2 text-xs font-semibold text-slate-600">Sair de qual endereço?</div>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {produtoBuscado.localizacoes.map((l) => {
+                const ativo = String(origemId) === String(l.location_id) && String(productId) === String(produtoBuscado.product_id);
+                return (
+                  <button
+                    key={l.location_id}
+                    type="button"
+                    onClick={() => usarEndereco(l)}
+                    className={`rounded-full px-3 py-1 text-xs font-bold transition ${
+                      ativo
+                        ? "bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-md shadow-indigo-500/30"
+                        : "bg-white text-slate-700 shadow-sm hover:bg-indigo-50"
+                    }`}
+                  >
+                    {l.endereco} · {l.quantidade}
+                  </button>
+                );
+              })}
+              {produtoBuscado.localizacoes.length === 0 && <span className="text-xs text-rose-600">sem saldo em nenhum endereço deste CD</span>}
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Origem */}

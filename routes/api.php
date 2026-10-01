@@ -64,7 +64,7 @@ Route::middleware('auth.token')->group(function () {
 
         // Relatórios
         Route::get('/reports/produto-localizacao', [ReportController::class, 'produtoLocalizacao'])->middleware('perm:relatorios');
-        Route::get('/products/buscar', [ReportController::class, 'produtoLocalizacao'])->middleware('perm:ver_mapa');
+        Route::get('/products/buscar', [ReportController::class, 'produtoLocalizacao'])->middleware('perm:ver_mapa|movimentar|solicitar|relatorios');
         Route::get('/reports/historico', [ReportController::class, 'historico'])->middleware('perm:relatorios');
         Route::get('/locations/{location}/historico', [ReportController::class, 'historicoEndereco'])->middleware('perm:ver_mapa');
 
