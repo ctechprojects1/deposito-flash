@@ -9,6 +9,7 @@ import {
   atualizarSaldoLocal,
   replicarParaLocal,
   historicoEndereco,
+  renomearProduto,
   consultarMicrovix,
   sincronizarMicrovix,
 } from "../services/api";
@@ -22,6 +23,8 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
   const [loading, setLoading] = useState(false);
   const [zerando, setZerando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
+  // Correção da descrição de um produto (lápis ao lado do nome).
+  const [renomeando, setRenomeando] = useState(null); // { product_id, nome }
 
   // Form de novo produto
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -94,6 +97,21 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
       setErroRep(e?.response?.data?.message || "Erro ao replicar.");
     } finally {
       setSalvandoRep(false);
+    }
+  }
+
+  async function salvarNome() {
+    const nome = renomeando?.nome.trim() ?? "";
+    if (!/\p{L}/u.test(nome) || nome.length < 3) {
+      alert("A descrição precisa ter o nome do produto (não só números).");
+      return;
+    }
+    try {
+      await renomearProduto(renomeando.product_id, nome);
+      setRenomeando(null);
+      await recarregar();
+    } catch (e) {
+      alert(e?.response?.data?.message || "Erro ao corrigir a descrição.");
     }
   }
 
@@ -253,6 +271,8 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
       payload = { nome: p.nome, codigo_barras: p.cod_barra || null, codigo_microvix: p.cod_produto || null };
     } else if (manual) {
       if (!novo.nome.trim()) return setErroForm("A descrição é obrigatória.");
+      if (!/\p{L}/u.test(novo.nome))
+        return setErroForm("A descrição precisa ter o nome do produto (não só números). A quantidade vai no campo Quantidade.");
       payload = {
         nome: novo.nome.trim(),
         codigo_barras: novo.codigo_barras.trim() || null,
@@ -324,7 +344,37 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
               {produtos.map((p) => (
                 <li key={p.stock_id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-2.5">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium text-slate-800">{p.nome}</div>
+                    {renomeando?.product_id === p.product_id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          value={renomeando.nome}
+                          onChange={(e) => setRenomeando((r) => ({ ...r, nome: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") salvarNome();
+                            if (e.key === "Escape") setRenomeando(null);
+                          }}
+                          autoFocus
+                          className="w-full rounded-lg border border-indigo-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        />
+                        <button onClick={salvarNome} className="rounded-full bg-indigo-500 px-2.5 py-1 text-xs font-bold text-white">OK</button>
+                        <button onClick={() => setRenomeando(null)} className="px-1 text-xs text-slate-400">cancelar</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate font-medium text-slate-800">{p.nome}</span>
+                        {podeGerenciar && (
+                          <button
+                            onClick={() => setRenomeando({ product_id: p.product_id, nome: p.nome ?? "" })}
+                            title="Corrigir descrição"
+                            className="shrink-0 rounded p-0.5 text-slate-300 transition hover:bg-slate-100 hover:text-indigo-500"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.232-6.232a2.5 2.5 0 113.536 3.536L12.536 16.536 9 17l.464-3.536z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-x-3 font-mono text-xs text-slate-400">
                       {p.codigo_microvix && <span>MVX: {p.codigo_microvix}</span>}
                       {p.codigo_barras && <span>Barras: {p.codigo_barras}</span>}
@@ -472,13 +522,16 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                   {/* Cadastro manual (fallback) */}
                   {manual && (
                     <div className="mt-3 space-y-2">
-                      <input
-                        value={novo.nome}
-                        onChange={(e) => setNovo((n) => ({ ...n, nome: e.target.value }))}
-                        placeholder="Descrição (obrigatório)"
-                        className="input-nuvem"
-                        autoFocus
-                      />
+                      <label className="block text-xs font-semibold text-slate-600">
+                        Descrição do produto <span className="text-rose-500">*</span>
+                        <input
+                          value={novo.nome}
+                          onChange={(e) => setNovo((n) => ({ ...n, nome: e.target.value }))}
+                          placeholder="Ex.: CABO HDMI 2M PRETO (não é a quantidade)"
+                          className="input-nuvem mt-1 font-normal"
+                          autoFocus
+                        />
+                      </label>
                       <div className="grid grid-cols-2 gap-2">
                         <input
                           value={novo.codigo_barras}
@@ -493,15 +546,18 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                           className="input-nuvem"
                         />
                       </div>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={novo.quantidade}
-                        onChange={(e) => setNovo((n) => ({ ...n, quantidade: e.target.value }))}
-                        placeholder="Quantidade (opcional, padrão 0)"
-                        className="input-nuvem"
-                      />
+                      <label className="block text-xs font-semibold text-slate-600">
+                        Quantidade
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={novo.quantidade}
+                          onChange={(e) => setNovo((n) => ({ ...n, quantidade: e.target.value }))}
+                          placeholder="0"
+                          className="input-nuvem mt-1 font-normal"
+                        />
+                      </label>
                     </div>
                   )}
 

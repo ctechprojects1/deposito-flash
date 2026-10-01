@@ -90,7 +90,8 @@ class StockImportService
                         ['nome' => $nome !== '' ? $nome : $codigo]
                     );
 
-                    if ($nome !== '' && $product->nome !== $nome) {
+                    // Só atualiza a descrição se a nova tiver letras (evita "1", "10"...).
+                    if ($nome !== '' && $product->nome !== $nome && preg_match('/\p{L}/u', $nome)) {
                         $product->update(['nome' => $nome]);
                     }
 

@@ -140,6 +140,12 @@ export async function replicarParaLocal(locationId, itens, origem = null) {
   return data;
 }
 
+/** Corrige a descrição de um produto (vale em todos os endereços). */
+export async function renomearProduto(productId, nome) {
+  const { data } = await api.put(`/products/${productId}`, { nome });
+  return data;
+}
+
 /** Remove um produto (registro de estoque) de um endereço. */
 export async function removerProdutoLocal(locationId, stockId) {
   const { data } = await api.delete(`/locations/${locationId}/produtos/${stockId}`);

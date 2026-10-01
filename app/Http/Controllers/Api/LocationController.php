@@ -262,10 +262,13 @@ class LocationController extends Controller
     public function adicionarProduto(Request $request, Location $location): JsonResponse
     {
         $dados = $request->validate([
-            'nome'            => ['required', 'string', 'max:191'],
+            'nome'            => ['required', 'string', 'min:3', 'max:191', 'regex:/\p{L}/u'],
             'codigo_barras'   => ['nullable', 'string', 'max:60'],
             'codigo_microvix' => ['nullable', 'string', 'max:60'],
             'quantidade'      => ['nullable', 'numeric', 'min:0'],
+        ], [
+            'nome.regex' => 'A descrição precisa ter o nome do produto (não só números). Confira se a quantidade não foi digitada no campo Descrição.',
+            'nome.min'   => 'A descrição precisa ter o nome do produto. Confira se a quantidade não foi digitada no campo Descrição.',
         ]);
 
         $codMicrovix = $dados['codigo_microvix'] ?? null;
@@ -318,6 +321,23 @@ class LocationController extends Controller
 
             return response()->json(['message' => 'Produto adicionado ao endereço.'], 201);
         });
+    }
+
+    /**
+     * Corrige a descrição de um produto (vale para todos os endereços).
+     * PUT /api/products/{product}  { nome }
+     */
+    public function renomearProduto(Request $request, Product $product): JsonResponse
+    {
+        $dados = $request->validate([
+            'nome' => ['required', 'string', 'min:3', 'max:191', 'regex:/\p{L}/u'],
+        ], [
+            'nome.regex' => 'A descrição precisa ter o nome do produto (não só números).',
+        ]);
+
+        $product->update(['nome' => trim($dados['nome'])]);
+
+        return response()->json(['message' => 'Descrição atualizada.', 'nome' => $product->nome]);
     }
 
     /**
