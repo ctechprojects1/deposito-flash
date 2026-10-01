@@ -333,6 +333,7 @@ class LocationController extends Controller
             'nome' => ['required', 'string', 'min:3', 'max:191', 'regex:/\p{L}/u'],
         ], [
             'nome.regex' => 'A descrição precisa ter o nome do produto (não só números).',
+            'nome.min'   => 'A descrição precisa ter o nome do produto (não só números).',
         ]);
 
         $product->update(['nome' => trim($dados['nome'])]);
