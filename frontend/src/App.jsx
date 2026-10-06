@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { rotuloCD } from "./rotuloCD";
 import { useAuth } from "./AuthContext";
 import Login from "./components/Login";
 import StockMap from "./components/StockMap";
@@ -143,7 +144,7 @@ function SeletorDeposito({ lista, atual, onTrocar }) {
   if (lista.length === 1) {
     return (
       <span className={`rounded-full bg-gradient-to-r px-4 py-1.5 text-sm font-bold text-white shadow-lg ${cor(lista[0])}`}>
-        CD {lista[0].nome}
+        {rotuloCD(lista[0].nome)}
       </span>
     );
   }
@@ -160,7 +161,7 @@ function SeletorDeposito({ lista, atual, onTrocar }) {
               ativo ? `bg-gradient-to-r text-white shadow-lg ${cor(d)}` : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
             }`}
           >
-            CD {d.nome}
+            {rotuloCD(d.nome)}
           </button>
         );
       })}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { rotuloCD } from "../rotuloCD";
 import {
   fetchUsuarios,
   fetchPermissoes,
@@ -88,7 +89,7 @@ export default function UsersScreen() {
                     .filter((d) => u.depositos.includes(d.id))
                     .map((d) => (
                       <span key={d.id} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-600">
-                        CD {d.nome}
+                        {rotuloCD(d.nome)}
                       </span>
                     ))
                 )}
@@ -218,7 +219,7 @@ function UserModal({ user, permissoes, depositos, onClose, onSaved }) {
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
                   >
-                    CD {d.nome}
+                    {rotuloCD(d.nome)}
                   </button>
                 );
               })}

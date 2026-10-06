@@ -210,6 +210,7 @@ export default function StockMap() {
       {gerenciar && (
         <AddressManager
           times={times.map((t) => t.time)}
+          posicoes={posicoes}
           alfabetica={alfabetica}
           enderecos={locations}
           podeGerenciar={podeGerenciar}

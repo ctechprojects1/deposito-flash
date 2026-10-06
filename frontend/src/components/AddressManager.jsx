@@ -13,8 +13,9 @@ for (const s of ["A", "B", "C", "D", "E"]) for (let n = 1; n <= 5; n++) PRESETS_
  * Popup para criar novos Times (colunas) e novas posições/linhas (1A, 1B...).
  * Se o Time já existir, apenas adiciona as posições novas.
  */
-export default function AddressManager({ times = [], alfabetica = false, enderecos = [], podeGerenciar = true, podeExcluir = false, onClose, onCreated }) {
-  const PRESETS = alfabetica ? PRESETS_ALFA : PRESETS_NIVEL;
+export default function AddressManager({ times = [], posicoes = [], alfabetica = false, enderecos = [], podeGerenciar = true, podeExcluir = false, onClose, onCreated }) {
+  // Atalhos: as posições que este CD já usa; CD vazio usa o padrão do formato.
+  const PRESETS = posicoes.length ? posicoes : alfabetica ? PRESETS_ALFA : PRESETS_NIVEL;
   const [time, setTime] = useState("");
   const [selecionadas, setSelecionadas] = useState([]);
   const [custom, setCustom] = useState("");
