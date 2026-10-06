@@ -4,8 +4,10 @@ import { useEffect, useRef } from "react";
  * Chama `fn` a cada `ms` milissegundos, sem precisar de F5.
  * - Pausa enquanto a aba do navegador está escondida e atualiza ao voltar.
  * - Não empilha chamadas: se a anterior ainda não terminou, pula a vez.
+ * - emSegundoPlano: continua rodando com a aba escondida (ex.: aviso de
+ *   nova separação; o navegador pode espaçar para ~1x por minuto).
  */
-export default function useAutoRefresh(fn, ms, enabled = true) {
+export default function useAutoRefresh(fn, ms, enabled = true, { emSegundoPlano = false } = {}) {
   const fnRef = useRef(fn);
   fnRef.current = fn;
 
@@ -16,7 +18,7 @@ export default function useAutoRefresh(fn, ms, enabled = true) {
     let rodando = false;
 
     const tick = async () => {
-      if (document.hidden || rodando) return;
+      if ((document.hidden && !emSegundoPlano) || rodando) return;
       rodando = true;
       try {
         await fnRef.current();
@@ -37,7 +39,7 @@ export default function useAutoRefresh(fn, ms, enabled = true) {
     };
     const aoMudarVisibilidade = () => {
       if (document.hidden) {
-        parar();
+        if (!emSegundoPlano) parar();
       } else {
         tick();
         iniciar();
@@ -50,5 +52,5 @@ export default function useAutoRefresh(fn, ms, enabled = true) {
       parar();
       document.removeEventListener("visibilitychange", aoMudarVisibilidade);
     };
-  }, [ms, enabled]);
+  }, [ms, enabled, emSegundoPlano]);
 }

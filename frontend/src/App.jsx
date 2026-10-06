@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { notificar, pedirPermissaoNotificacao, prepararAudio, tocarAlerta } from "./alertaSonoro";
 import { rotuloCD } from "./rotuloCD";
 import { useAuth } from "./AuthContext";
 import Login from "./components/Login";
@@ -34,13 +35,58 @@ export default function App() {
   // Quantas solicitações aguardam separação (badge na aba + título do navegador).
   const podeSeparar = !!user && !!deposito && hasPerm("separar");
   const [aguardando, setAguardando] = useState(0);
-  const contarAguardando = async () => setAguardando((await fetchSolicitacoes("pendente")).length);
+
+  // Aviso sonoro: toca quando aparece na fila uma solicitação que ainda não
+  // tinha sido vista (compara pelos números, não só pela quantidade).
+  const [somAtivo, setSomAtivo] = useState(() => {
+    try {
+      return localStorage.getItem("som_separacao") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const vistas = useRef(null); // Set de ids já vistos neste CD (null = primeira carga)
+  const somRef = useRef(somAtivo);
+  somRef.current = somAtivo;
+
+  useEffect(() => prepararAudio(), []);
+
+  const contarAguardando = async () => {
+    const lista = await fetchSolicitacoes("pendente");
+    setAguardando(lista.length);
+    const novas = vistas.current ? lista.filter((s) => !vistas.current.has(s.id)) : [];
+    vistas.current = new Set(lista.map((s) => s.id));
+    if (novas.length && somRef.current) {
+      tocarAlerta();
+      const n = novas[0];
+      notificar(
+        novas.length > 1 ? `${novas.length} novas separações` : `Nova separação #${n.id}`,
+        novas.length > 1 ? "Abra o Painel do Separador." : `${n.destino}${deposito ? ` · ${deposito.nome}` : ""}`
+      );
+    }
+  };
 
   useEffect(() => {
     setAguardando(0);
+    vistas.current = null; // trocou de CD: não apita pelo que já estava na fila
     if (podeSeparar) contarAguardando().catch(() => {});
   }, [podeSeparar, deposito?.id]);
-  useAutoRefresh(contarAguardando, 20000, podeSeparar);
+  // Continua checando com a aba minimizada, para o aviso tocar mesmo assim.
+  useAutoRefresh(contarAguardando, 20000, podeSeparar, { emSegundoPlano: true });
+
+  function alternarSom() {
+    const novo = !somAtivo;
+    setSomAtivo(novo);
+    try {
+      localStorage.setItem("som_separacao", novo ? "1" : "0");
+    } catch {
+      /* ignora */
+    }
+    if (novo) {
+      tocarAlerta(); // teste: o operador ouve como é o aviso
+      pedirPermissaoNotificacao();
+    }
+  }
 
   useEffect(() => {
     document.title =
@@ -71,6 +117,20 @@ export default function App() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <SeletorDeposito lista={user.depositos ?? []} atual={deposito} onTrocar={trocarDeposito} />
+            {podeSeparar && (
+              <button
+                onClick={alternarSom}
+                title={somAtivo ? "Aviso sonoro de nova separação: ligado (clique para silenciar)" : "Aviso sonoro desligado (clique para ligar)"}
+                className={`flex h-9 w-9 items-center justify-center rounded-full shadow-md transition hover:-translate-y-0.5 ${
+                  somAtivo ? "bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-orange-500/30" : "bg-white text-slate-400"
+                }`}
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0a3 3 0 11-6 0" />
+                  {!somAtivo && <path strokeLinecap="round" strokeWidth={2} d="M4 4l16 16" />}
+                </svg>
+              </button>
+            )}
             <span className="hidden text-sm text-slate-500 sm:inline">
               Olá, <strong className="text-slate-700">{user.name}</strong>
             </span>
