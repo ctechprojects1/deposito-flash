@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CatalogoController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\InventoryCountController;
 use App\Http\Controllers\Api\LocationController;
@@ -56,7 +57,14 @@ Route::middleware('auth.token')->group(function () {
         Route::get('/products/validar-microvix', [ProductController::class, 'validarMicrovix'])->middleware('perm:solicitar');
         Route::get('/products/{product}/locais', [ProductController::class, 'locais'])->middleware('perm:solicitar');
 
-        // Microvix (consulta de produto + base de códigos de barras)
+        // Base de apoio (planilha Shopee etc.): importar e buscar
+    Route::get('/catalogo/buscar', [CatalogoController::class, 'buscar'])->middleware('perm:gerenciar_enderecos|ver_mapa|movimentar|solicitar');
+    Route::middleware('perm:gerenciar_enderecos')->group(function () {
+        Route::post('/catalogo/importar', [CatalogoController::class, 'importar']);
+        Route::get('/catalogo/status', [CatalogoController::class, 'status']);
+    });
+
+    // Microvix (consulta de produto + base de códigos de barras)
         Route::middleware('perm:gerenciar_enderecos')->group(function () {
             Route::get('/microvix/consultar', [MicrovixController::class, 'consultar']);
             Route::post('/microvix/sincronizar', [MicrovixController::class, 'sincronizar']);

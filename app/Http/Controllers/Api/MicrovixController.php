@@ -24,7 +24,19 @@ class MicrovixController extends Controller
             'codigo' => ['required', 'string', 'max:60'],
         ]);
 
-        return response()->json($this->microvix->consultar($dados['codigo']));
+        $r = $this->microvix->consultar($dados['codigo']);
+
+        // Não está no Microvix: procura na base de apoio (planilha Shopee etc.).
+        if (! $r['encontrado'] && ($c = CatalogoController::porCodigo($dados['codigo']))) {
+            return response()->json([
+                'encontrado'    => true,
+                'produto'       => CatalogoController::formatar($c),
+                'sync_pendente' => false,
+                'mensagem'      => null,
+            ]);
+        }
+
+        return response()->json($r);
     }
 
     /**

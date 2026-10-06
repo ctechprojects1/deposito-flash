@@ -189,6 +189,24 @@ export async function statusMicrovix() {
   return data; // { total, ultima_sync, configurado }
 }
 
+/* ===================== Base de apoio (Shopee / planilhas) ===================== */
+
+export async function importarCatalogo(fonte, itens) {
+  const { data } = await api.post("/catalogo/importar", { fonte, itens });
+  return data;
+}
+
+export async function statusCatalogo() {
+  const { data } = await api.get("/catalogo/status");
+  return data.data ?? [];
+}
+
+/** Busca por SKU, EAN ou nome na base de apoio. { data, sugestoes } */
+export async function buscarCatalogo(q) {
+  const { data } = await api.get("/catalogo/buscar", { params: { q } });
+  return { data: data.data ?? [], sugestoes: data.sugestoes ?? [] };
+}
+
 /* ===================== Relatórios ===================== */
 
 /** Busca tolerante a erro. Retorna { data: encontrados, sugestoes: parecidos }. */

@@ -10,6 +10,7 @@ import {
   replicarParaLocal,
   historicoEndereco,
   renomearProduto,
+  buscarCatalogo,
   consultarMicrovix,
   sincronizarMicrovix,
 } from "../services/api";
@@ -268,7 +269,14 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
     let payload;
     if (consulta?.status === "encontrado") {
       const p = consulta.produto;
-      payload = { nome: p.nome, codigo_barras: p.cod_barra || null, codigo_microvix: p.cod_produto || null };
+      // Produto da base de apoio (Shopee) não tem código Microvix: usa o SKU
+      // como código até ser cruzado com o Microvix.
+      payload = {
+        nome: p.nome,
+        codigo_barras: p.cod_barra || null,
+        codigo_microvix: p.cod_produto || p.sku || null,
+        sku: p.sku || null,
+      };
     } else if (manual) {
       if (!novo.nome.trim()) return setErroForm("A descrição é obrigatória.");
       if (!/\p{L}/u.test(novo.nome))
@@ -477,9 +485,18 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                   {/* 2a) Encontrado: só falta a quantidade */}
                   {consulta?.status === "encontrado" && (
                     <div className="mt-3 rounded-lg bg-white p-3 ring-1 ring-emerald-200">
+                      {consulta.produto.fonte && (
+                        <span className="mb-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold uppercase text-amber-800">
+                          base {consulta.produto.fonte} · não está no Microvix
+                        </span>
+                      )}
                       <div className="text-sm font-semibold text-slate-800">{consulta.produto.nome}</div>
                       <div className="mt-0.5 flex flex-wrap gap-x-3 font-mono text-xs text-slate-500">
-                        <span>Cód. interno: {consulta.produto.cod_produto || "—"}</span>
+                        {consulta.produto.fonte ? (
+                          <span>SKU: {consulta.produto.sku || "—"}</span>
+                        ) : (
+                          <span>Cód. interno: {consulta.produto.cod_produto || "—"}</span>
+                        )}
                         <span>Barras: {consulta.produto.cod_barra || "—"}</span>
                       </div>
                       {consulta.produto.desativado && (
@@ -503,6 +520,14 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                   {consulta?.status === "nao_encontrado" && !manual && (
                     <div className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800 ring-1 ring-rose-200">
                       {consulta.mensagem}
+                      <BuscaNaBase
+                        termoInicial={codigoBusca}
+                        onEscolher={(produto) => {
+                          setConsulta({ status: "encontrado", produto });
+                          setNovo((n) => ({ ...n, quantidade: "" }));
+                          setTimeout(() => qtdRef.current?.focus(), 50);
+                        }}
+                      />
                       <button onClick={cadastrarManual} className="mt-2 block text-xs font-semibold text-rose-700 underline">
                         Cadastrar manualmente mesmo assim
                       </button>
@@ -686,6 +711,66 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
             <button onClick={onClose} className="btn-nuvem px-4 py-2">Fechar</button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Código não achado no Microvix nem na base: procura na base de apoio pelo
+ * nome/SKU (tolerante a erro) para o operador escolher o produto certo.
+ */
+function BuscaNaBase({ termoInicial = "", onEscolher }) {
+  // Já começa procurando pelo que foi bipado/digitado (ex.: SKU de referência com várias variações).
+  const [termo, setTermo] = useState(termoInicial);
+  const [res, setRes] = useState(null);
+  const [buscando, setBuscando] = useState(false);
+
+  useEffect(() => {
+    const t = termo.trim();
+    if (t.length < 3) {
+      setRes(null);
+      return undefined;
+    }
+    const timer = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        setRes(await buscarCatalogo(t));
+      } catch {
+        setRes({ data: [], sugestoes: [] });
+      } finally {
+        setBuscando(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [termo]);
+
+  const lista = res ? [...res.data, ...res.sugestoes] : [];
+
+  return (
+    <div className="mt-3 rounded-lg bg-white p-2 text-slate-700 ring-1 ring-amber-200">
+      <div className="mb-1 text-xs font-semibold text-amber-800">Procurar na base de apoio (Shopee) pelo nome ou SKU:</div>
+      <input
+        value={termo}
+        onChange={(e) => setTermo(e.target.value)}
+        placeholder={termoInicial ? `Ex.: parte do nome do produto (bipado: ${termoInicial})` : "Parte do nome ou SKU"}
+        className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
+      />
+      {buscando && <div className="mt-1 text-xs text-slate-400">Buscando...</div>}
+      {res && !buscando && lista.length === 0 && <div className="mt-1 text-xs text-slate-400">Nada parecido na base.</div>}
+      <div className="mt-1 max-h-48 overflow-y-auto">
+        {lista.map((p, i) => (
+          <button
+            key={`${p.sku}-${p.cod_barra}-${i}`}
+            onClick={() => onEscolher(p)}
+            className="block w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-amber-50"
+          >
+            <span className="block font-semibold text-slate-800">{p.nome}</span>
+            <span className="font-mono text-slate-400">
+              SKU {p.sku || "—"} · EAN {p.cod_barra || "—"}
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   );

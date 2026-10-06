@@ -101,15 +101,47 @@ class BuscaProdutos
     {
         return $this->cacheCandidatos ??= Product::query()
             ->whereHas('stocks')
-            ->get(['id', 'nome', 'codigo_microvix', 'codigo_barras']);
+            ->get(['id', 'nome', 'codigo_microvix', 'codigo_barras', 'sku']);
+    }
+
+    /**
+     * Mesma busca tolerante a erro para qualquer lista (ex.: base Shopee).
+     *
+     * @return array{exatos: Collection, parecidos: Collection} itens no formato ['item' => ..., 'nota' => int]
+     */
+    public function ranquear(Collection $itens, callable $nomeDe, callable $codigosDe, string $termo, int $maxExatos = 20, int $maxParecidos = 10): array
+    {
+        $termo = trim($termo);
+        if ($termo === '') {
+            return ['exatos' => collect(), 'parecidos' => collect()];
+        }
+        $t = $this->normalizar($termo);
+        $tokens = array_values(array_filter(explode(' ', $t), fn ($x) => $x !== ''));
+        $codigoBusca = preg_replace('/\s+/', '', $t);
+
+        $notas = $itens
+            ->map(fn ($i) => ['item' => $i, 'nota' => $this->notaPor((string) $nomeDe($i), $codigosDe($i), $t, $tokens, $codigoBusca)])
+            ->filter(fn ($r) => $r['nota'] >= self::NOTA_MINIMA)
+            ->sortByDesc('nota')
+            ->values();
+
+        return [
+            'exatos'    => $notas->filter(fn ($r) => $r['nota'] >= self::NOTA_EXATA)->take($maxExatos)->values(),
+            'parecidos' => $notas->filter(fn ($r) => $r['nota'] < self::NOTA_EXATA)->take($maxParecidos)->values(),
+        ];
     }
 
     private function nota(Product $p, string $t, array $tokens, string $codigoBusca): int
     {
+        return $this->notaPor((string) $p->nome, [$p->codigo_microvix, $p->codigo_barras, $p->sku], $t, $tokens, $codigoBusca);
+    }
+
+    private function notaPor(string $nomeBruto, array $codigos, string $t, array $tokens, string $codigoBusca): int
+    {
         $melhor = 0;
 
-        // ---- Códigos (Microvix / barras)
-        foreach ([$p->codigo_microvix, $p->codigo_barras] as $codigo) {
+        // ---- Códigos (Microvix / barras / SKU)
+        foreach ($codigos as $codigo) {
             $c = $this->normalizar((string) $codigo);
             $c = preg_replace('/\s+/', '', $c);
             if ($c === '' || $codigoBusca === '') {
@@ -133,7 +165,7 @@ class BuscaProdutos
         }
 
         // ---- Descrição
-        $nome = $this->normalizar((string) $p->nome);
+        $nome = $this->normalizar($nomeBruto);
         if ($nome !== '' && $tokens) {
             if (str_contains($nome, $t)) {
                 $melhor = max($melhor, 95);

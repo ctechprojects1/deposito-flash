@@ -265,6 +265,7 @@ class LocationController extends Controller
             'nome'            => ['required', 'string', 'min:3', 'max:191', 'regex:/\p{L}/u'],
             'codigo_barras'   => ['nullable', 'string', 'max:60'],
             'codigo_microvix' => ['nullable', 'string', 'max:60'],
+            'sku'             => ['nullable', 'string', 'max:100'],
             'quantidade'      => ['nullable', 'numeric', 'min:0'],
         ], [
             'nome.regex' => 'A descrição precisa ter o nome do produto (não só números). Confira se a quantidade não foi digitada no campo Descrição.',
@@ -273,8 +274,9 @@ class LocationController extends Controller
 
         $codMicrovix = $dados['codigo_microvix'] ?? null;
         $codBarras   = $dados['codigo_barras'] ?? null;
+        $sku         = trim((string) ($dados['sku'] ?? '')) ?: null;
 
-        return DB::transaction(function () use ($dados, $location, $codMicrovix, $codBarras) {
+        return DB::transaction(function () use ($dados, $location, $codMicrovix, $codBarras, $sku) {
             // Reaproveita produto existente pelo código (microvix ou barras); senão cria.
             $product = null;
             if ($codMicrovix) {
@@ -283,12 +285,16 @@ class LocationController extends Controller
             if (! $product && $codBarras) {
                 $product = Product::where('codigo_barras', $codBarras)->first();
             }
+            if (! $product && $sku) {
+                $product = Product::where('sku', $sku)->first();
+            }
 
             if (! $product) {
                 $product = Product::create([
                     'nome'            => $dados['nome'],
                     'codigo_microvix' => $codMicrovix ?: null,
                     'codigo_barras'   => $codBarras ?: null,
+                    'sku'             => $sku,
                     'status'          => Product::STATUS_ATIVO,
                 ]);
             } else {
@@ -300,6 +306,9 @@ class LocationController extends Controller
                 if (! $product->codigo_barras && $codBarras
                     && ! Product::where('codigo_barras', $codBarras)->where('id', '!=', $product->id)->exists()) {
                     $product->codigo_barras = $codBarras;
+                }
+                if (! $product->sku && $sku) {
+                    $product->sku = $sku;
                 }
                 if ($product->isDirty()) {
                     $product->save();
