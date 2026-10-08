@@ -35,6 +35,9 @@ class WithdrawalRequest extends Model
         'finalizada_em',
         'reaberta_em',
         'reaberta_por_id',
+        'excluida_em',
+        'excluida_por_id',
+        'motivo_exclusao',
     ];
 
     protected function casts(): array
@@ -43,6 +46,7 @@ class WithdrawalRequest extends Model
             'iniciada_em'   => 'datetime',
             'finalizada_em' => 'datetime',
             'reaberta_em'   => 'datetime',
+            'excluida_em'   => 'datetime',
         ];
     }
 
@@ -50,6 +54,11 @@ class WithdrawalRequest extends Model
     public function reabertaPor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reaberta_por_id');
+    }
+
+    public function excluidaPor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'excluida_por_id');
     }
 
     /*

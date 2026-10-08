@@ -325,6 +325,12 @@ export async function finalizarSeparacao(id) {
   return data;
 }
 
+/** Exclui uma separação não finalizada (motivo obrigatório). */
+export async function excluirSeparacao(id, motivo) {
+  const { data } = await api.delete(`/withdrawal-requests/${id}`, { data: { motivo } });
+  return data;
+}
+
 /** Admin: reabre uma separação finalizada (devolve o estoque). */
 export async function reabrirSeparacao(id) {
   const { data } = await api.post(`/withdrawal-requests/${id}/reabrir`);

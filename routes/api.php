@@ -105,6 +105,9 @@ Route::middleware('auth.token')->group(function () {
             Route::post('/withdrawal-requests/{withdrawalRequest}/finalizar', [WithdrawalRequestController::class, 'finalizar']);
         });
 
+        // Excluir separação não finalizada (com justificativa)
+        Route::delete('/withdrawal-requests/{withdrawalRequest}', [WithdrawalRequestController::class, 'excluir'])->middleware('perm:excluir_separacoes');
+
         // Admin: reabrir separação finalizada (com estorno do estoque)
         Route::post('/withdrawal-requests/{withdrawalRequest}/reabrir', [WithdrawalRequestController::class, 'reabrir'])->middleware('perm:admin');
     });

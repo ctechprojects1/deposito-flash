@@ -9,6 +9,7 @@ import {
   reabrirSeparacao,
   abrirDocumentoSolicitacao,
   dividirItemSeparacao,
+  excluirSeparacao,
 } from "../services/api";
 import { useAuth } from "../AuthContext";
 import useAutoRefresh from "../hooks/useAutoRefresh";
@@ -24,11 +25,22 @@ const STATUS = {
   em_separacao: { rotulo: "Em separação", cor: "bg-sky-100 text-sky-800" },
   pausada: { rotulo: "Pausada", cor: "bg-slate-200 text-slate-700" },
   concluida: { rotulo: "Finalizada", cor: "bg-emerald-100 text-emerald-800" },
+  cancelada: { rotulo: "Excluída", cor: "bg-rose-100 text-rose-700" },
 };
 
 const FILTROS = [
   { id: "abertas", rotulo: "Abertas", status: "pendente,em_separacao,pausada" },
   { id: "concluidas", rotulo: "Finalizadas", status: "concluida" },
+  { id: "excluidas", rotulo: "Excluídas", status: "cancelada" },
+];
+
+// Motivos prontos para excluir uma separação (chips) — complementa com texto.
+const MOTIVOS_EXCLUSAO = [
+  "Solicitação duplicada",
+  "Pedido cancelado pelo cliente",
+  "Enviada por engano",
+  "Documento/nota errada",
+  "Outro",
 ];
 
 const TIPOS = { pedido: "Pedido", nfe: "NF-e", documento_interno: "Doc. interno" };
@@ -137,6 +149,11 @@ function CardSolicitacao({ s, onAbrir }) {
         Solicitante: {s.solicitante}
         {s.separador && ` · Separador: ${s.separador}`}
       </div>
+      {s.status === "cancelada" && (
+        <div className="mt-2 rounded-lg bg-rose-50 px-2 py-1 text-xs text-rose-700">
+          Excluída por {s.excluida_por} em {s.excluida_em}: {s.motivo_exclusao}
+        </div>
+      )}
 
       <div className="mt-3">
         <div className="mb-1 flex justify-between text-xs text-slate-500">
@@ -162,6 +179,7 @@ function Checklist({ id, onVoltar }) {
   const [erro, setErro] = useState(null);
   const [aviso, setAviso] = useState(null);
   const [atualizadoEm, setAtualizadoEm] = useState(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   // Cada ação do usuário muda a "versão": uma atualização automática que
   // saiu antes da ação é descartada, pra não sobrescrever o que ele acabou de fazer.
@@ -279,6 +297,11 @@ function Checklist({ id, onVoltar }) {
               {s.reaberta_em && <span>Reaberta {s.reaberta_em} por {s.reaberta_por}</span>}
             </div>
             {s.observacao && <div className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{s.observacao}</div>}
+            {s.status === "cancelada" && (
+              <div className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                <strong>Excluída</strong> por {s.excluida_por} em {s.excluida_em}. Motivo: {s.motivo_exclusao}
+              </div>
+            )}
           </div>
           {s.tem_documento && (
             <button
@@ -331,8 +354,28 @@ function Checklist({ id, onVoltar }) {
         ))}
       </div>
 
+      {excluindo && (
+        <ExcluirSeparacaoModal
+          id={id}
+          onCancelar={() => setExcluindo(false)}
+          onExcluida={(r) => {
+            setExcluindo(false);
+            setS(r.data);
+            setAviso(r.message);
+          }}
+        />
+      )}
+
       {/* Ações */}
       <div className="card-nuvem sticky bottom-4 flex flex-wrap items-center justify-end gap-3 p-4">
+        {hasPerm("excluir_separacoes") && !concluida && s.status !== "cancelada" && (
+          <button
+            onClick={() => setExcluindo(true)}
+            className="mr-auto inline-flex items-center rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+          >
+            Excluir separação
+          </button>
+        )}
         {s.status === "pendente" && (
           <button className="btn-nuvem" onClick={() => executar("Iniciando separação...", async () => setS(await iniciarSeparacao(id)))}>
             Iniciar separação
@@ -571,6 +614,81 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividi
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Excluir separação: motivo obrigatório (chip + texto). */
+function ExcluirSeparacaoModal({ id, onCancelar, onExcluida }) {
+  const [motivo, setMotivo] = useState("");
+  const [detalhe, setDetalhe] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  const texto = motivo === "Outro" ? detalhe.trim() : [motivo, detalhe.trim()].filter(Boolean).join(" — ");
+  const valido = motivo && (motivo !== "Outro" || detalhe.trim().length >= 5);
+
+  async function confirmar() {
+    if (!valido) return;
+    setEnviando(true);
+    setErro(null);
+    try {
+      onExcluida(await excluirSeparacao(id, texto));
+    } catch (e) {
+      setErro(e?.response?.data?.message || "Não foi possível excluir.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onCancelar}>
+      <div className="card-nuvem w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-extrabold text-slate-800">Excluir separação #{id}</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Ela sai da fila e fica em "Excluídas" com o motivo, quem excluiu e quando. Nada é baixado do estoque.
+        </p>
+
+        <div className="mt-4 text-sm font-semibold text-slate-700">
+          Motivo <span className="text-rose-500">*</span>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {MOTIVOS_EXCLUSAO.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMotivo(m)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                motivo === m
+                  ? "bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-md shadow-rose-500/30"
+                  : "bg-slate-100 text-slate-600 hover:bg-rose-50"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={detalhe}
+          onChange={(e) => setDetalhe(e.target.value)}
+          rows={3}
+          maxLength={200}
+          placeholder={motivo === "Outro" ? "Descreva o motivo (obrigatório)" : "Detalhes (opcional)"}
+          className="input-nuvem mt-2"
+        />
+        {erro && <div className="mt-2 rounded-xl bg-rose-100 p-2 text-sm text-rose-800">{erro}</div>}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onCancelar} className="btn-ghost">Cancelar</button>
+          <button
+            onClick={confirmar}
+            disabled={!valido || enviando}
+            className="inline-flex items-center rounded-full bg-gradient-to-r from-rose-500 to-red-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-rose-500/30 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+          >
+            {enviando ? "Excluindo..." : "Excluir separação"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

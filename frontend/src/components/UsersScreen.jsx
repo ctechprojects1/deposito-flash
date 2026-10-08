@@ -19,6 +19,7 @@ const PERM_LABELS = {
   relatorios: "Relatórios",
   gerenciar_enderecos: "Gerenciar endereços",
   excluir_enderecos: "Excluir endereços",
+  excluir_separacoes: "Excluir separações",
   admin: "Administração (usuários)",
 };
 

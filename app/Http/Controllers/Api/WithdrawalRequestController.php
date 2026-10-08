@@ -177,7 +177,7 @@ class WithdrawalRequestController extends Controller
                 'items as itens_retirados' => fn ($q) => $q->where(fn ($w) => $w->where('retirado', true)->orWhere('nao_separado', true)),
                 'items as itens_nao_separados' => fn ($q) => $q->where('nao_separado', true),
             ])
-            ->with(['solicitante', 'separador'])
+            ->with(['solicitante', 'separador', 'excluidaPor'])
             ->latest()
             ->limit(200)
             ->get()
@@ -401,6 +401,45 @@ class WithdrawalRequestController extends Controller
     }
 
     /**
+     * Exclui (cancela) uma separação que ainda não foi finalizada, com
+     * justificativa obrigatória. Não apaga: fica em "Excluídas" com o motivo,
+     * quem excluiu e quando. Nada foi baixado do estoque antes de finalizar,
+     * então não há estorno. Finalizada: o admin precisa reabrir antes.
+     * DELETE .../{id}  { motivo }   (perm excluir_separacoes)
+     */
+    public function excluir(Request $request, WithdrawalRequest $withdrawalRequest): JsonResponse
+    {
+        $dados = $request->validate([
+            'motivo' => ['required', 'string', 'min:5', 'max:255'],
+        ], [
+            'motivo.required' => 'Informe o motivo da exclusão.',
+            'motivo.min'      => 'Descreva melhor o motivo da exclusão (mínimo 5 caracteres).',
+        ]);
+
+        $s = $withdrawalRequest;
+        if ($s->status === WithdrawalRequest::STATUS_CONCLUIDA) {
+            return response()->json([
+                'message' => 'Esta separação já foi finalizada e baixou o estoque. Um administrador precisa reabri-la antes de excluir.',
+            ], 409);
+        }
+        if ($s->status === WithdrawalRequest::STATUS_CANCELADA) {
+            return response()->json(['message' => 'Esta separação já foi excluída.'], 409);
+        }
+
+        $s->update([
+            'status'          => WithdrawalRequest::STATUS_CANCELADA,
+            'excluida_em'     => now(),
+            'excluida_por_id' => $request->user()->id,
+            'motivo_exclusao' => trim($dados['motivo']),
+        ]);
+
+        return response()->json([
+            'message' => "Separação #{$s->id} excluída.",
+            'data'    => $this->detalhe($s->fresh()),
+        ]);
+    }
+
+    /**
      * Admin reabre uma separação finalizada: devolve o estoque (estorno).
      * POST .../{id}/reabrir   (perm admin)
      */
@@ -553,12 +592,15 @@ class WithdrawalRequestController extends Controller
             'itens_nao_separados' => (int) ($s->itens_nao_separados ?? 0),
             'criada_em'        => $s->created_at?->format('d/m/Y H:i'),
             'finalizada_em'    => $s->finalizada_em?->format('d/m/Y H:i'),
+            'excluida_em'      => $s->excluida_em?->format('d/m/Y H:i'),
+            'excluida_por'     => $s->excluidaPor?->name,
+            'motivo_exclusao'  => $s->motivo_exclusao,
         ];
     }
 
     private function detalhe(WithdrawalRequest $s): array
     {
-        $s->load(['items.product.stocks.location', 'items.location', 'solicitante', 'separador', 'reabertaPor']);
+        $s->load(['items.product.stocks.location', 'items.location', 'solicitante', 'separador', 'reabertaPor', 'excluidaPor']);
 
         // Linhas do mesmo produto (item dividido entre endereços) ficam juntas,
         // na ordem em que o produto apareceu, com "parte 1 de 2", "2 de 2"...
@@ -605,6 +647,9 @@ class WithdrawalRequestController extends Controller
             'iniciada_em'     => $s->iniciada_em?->format('d/m/Y H:i'),
             'reaberta_em'     => $s->reaberta_em?->format('d/m/Y H:i'),
             'reaberta_por'    => $s->reabertaPor?->name,
+            'excluida_em'     => $s->excluida_em?->format('d/m/Y H:i'),
+            'excluida_por'    => $s->excluidaPor?->name,
+            'motivo_exclusao' => $s->motivo_exclusao,
             'total_itens'     => $itens->count(),
             'itens_retirados' => $itens->filter(fn ($i) => $i['retirado'] || $i['nao_separado'])->count(),
             'itens_nao_separados' => $itens->where('nao_separado', true)->count(),
