@@ -65,7 +65,9 @@ PROMPT;
             ['type' => 'text', 'text' => $prompt],
         ];
 
-        $dados = $this->chamarClaude($content, 16000);
+        // O pensamento adaptativo do Haiku 5.5 consome max_tokens junto com a resposta
+        // (e o tokenizer conta ~30% a mais), por isso a folga maior.
+        $dados = $this->chamarClaude($content, 32000);
         if (isset($dados['erro'])) {
             return $vazio + ['erro' => $dados['erro']];
         }
@@ -111,17 +113,23 @@ PROMPT;
     {
         @set_time_limit(0); // leitura pode passar de 30s em documento grande
 
+        $effort = strtolower(trim((string) config('services.anthropic.effort', 'medium')));
+        if (! in_array($effort, ['low', 'medium', 'high', 'xhigh', 'max'], true)) {
+            $effort = 'medium';
+        }
+
         try {
-            $response = Http::timeout(240)
+            $response = Http::timeout(300)
                 ->withHeaders([
                     'x-api-key'         => (string) config('services.anthropic.key'),
                     'anthropic-version' => '2023-06-01',
                     'content-type'      => 'application/json',
                 ])
                 ->post($this->endpoint, [
-                    'model'      => (string) config('services.anthropic.model', 'claude-sonnet-5'),
-                    'max_tokens' => $maxTokens,
-                    'messages'   => [['role' => 'user', 'content' => $content]],
+                    'model'         => (string) config('services.anthropic.model', 'claude-haiku-5-5'),
+                    'max_tokens'    => $maxTokens,
+                    'output_config' => ['effort' => $effort],
+                    'messages'      => [['role' => 'user', 'content' => $content]],
                 ]);
 
             if ($response->failed()) {
@@ -130,6 +138,14 @@ PROMPT;
             }
 
             $json = $response->json();
+
+            // Classificador de segurança recusou (HTTP 200, sem fallback no Haiku 5.5).
+            if (($json['stop_reason'] ?? null) === 'refusal') {
+                $det = (array) ($json['stop_details'] ?? []);
+                Log::warning('NotaExtractor: recusa do modelo (categoria: ' . ($det['category'] ?? 'n/d') . ') '
+                    . mb_substr((string) ($det['explanation'] ?? ''), 0, 300));
+                return ['erro' => 'A leitura automática recusou este documento. Confira se o PDF é a nota ou o pedido certo, ou lance os itens manualmente.'];
+            }
 
             // O modelo pode mandar um bloco "thinking" antes do texto: junta só os blocos de texto.
             $texto = '';

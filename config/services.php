@@ -54,8 +54,10 @@ return [
     | Leitura de notas/pedidos em PDF (Claude). Mesma chave usada no PRODID.
     */
     'anthropic' => [
-        'key'   => env('ANTHROPIC_API_KEY'),
-        'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-5'),
+        'key'    => env('ANTHROPIC_API_KEY'),
+        'model'  => env('ANTHROPIC_MODEL', 'claude-haiku-5-5'),
+        // Profundidade do raciocínio (pensamento adaptativo): low, medium, high, xhigh ou max.
+        'effort' => env('ANTHROPIC_EFFORT', 'medium'),
     ],
 
 ];
