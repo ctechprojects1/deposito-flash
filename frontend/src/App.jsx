@@ -195,6 +195,8 @@ const CORES_CD = [
   "from-orange-400 to-rose-500 shadow-rose-500/30",
   "from-emerald-400 to-teal-500 shadow-teal-500/30",
   "from-fuchsia-500 to-purple-500 shadow-purple-500/30",
+  "from-amber-400 to-yellow-600 shadow-yellow-600/30",
+  "from-lime-500 to-green-600 shadow-green-600/30",
 ];
 
 function SeletorDeposito({ lista, atual, onTrocar }) {

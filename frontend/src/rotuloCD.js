@@ -1,4 +1,4 @@
-/** "Goiânia" -> "CD Goiânia"; "CD - Commerce" fica como está. */
+/** "Goiânia" -> "CD Goiânia"; "CD - Commerce" e "Depósito Mangalo" ficam como estão. */
 export function rotuloCD(nome) {
-  return /^cd\b/i.test(String(nome || "").trim()) ? nome : `CD ${nome}`;
+  return /^(cd|dep[oó]sito)\b/i.test(String(nome || "").trim()) ? nome : `CD ${nome}`;
 }
