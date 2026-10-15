@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\MicrovixBarra;
+use App\Models\MicrovixProduto;
+use App\Models\Product;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -76,6 +78,9 @@ class MicrovixService
         if (! $codProduto && ! $baseVazia && Cache::add('microvix_sync_on_miss', 1, 180)) {
             try {
                 $this->sincronizarBarras(2);
+                if (MicrovixProduto::query()->exists()) {
+                    $this->sincronizarProdutos(1);
+                }
             } catch (\Throwable $e) {
                 Log::warning('Microvix sync on-miss falhou: ' . $e->getMessage());
             }
@@ -88,9 +93,14 @@ class MicrovixService
             $produto['cod_barra'] = $codigo;
         }
 
-        // 3) Último recurso: o valor digitado pode ser o código interno.
+        // 3) O valor digitado pode ser o código interno.
         if (! $produto && ctype_digit($codigo) && strlen($codigo) <= 9) {
             $produto = $this->buscarPorCodigo($codigo);
+        }
+
+        // 4) Último recurso: a referência (SKU) exata do Microvix.
+        if (! $produto && ($codRef = MicrovixProduto::where('referencia', $codigo)->value('cod_produto'))) {
+            $produto = $this->buscarPorCodigo((string) $codRef);
         }
 
         if ($produto) {
@@ -100,6 +110,7 @@ class MicrovixService
                     'nome'        => trim((string) ($produto['nome'] ?? '')),
                     'cod_produto' => (string) ($produto['cod_produto'] ?? ''),
                     'cod_barra'   => (string) ($produto['cod_barra'] ?? ''),
+                    'sku'         => trim((string) ($produto['referencia'] ?? '')),
                     'desativado'  => strtoupper((string) ($produto['desativado'] ?? '')) === 'S',
                 ],
                 'sync_pendente' => false,
@@ -216,6 +227,157 @@ class MicrovixService
             'concluido' => $concluido,
             'total'     => MicrovixBarra::count(),
         ];
+    }
+
+    /**
+     * Sincroniza um lote de páginas de LinxProdutos (nome + referência) a
+     * partir do último timestamp gravado. Mesmo esquema de lotes das barras.
+     *
+     * @return array{paginas:int, upserts:int, concluido:bool, total:int}
+     */
+    public function sincronizarProdutos(int $maxPaginas = 3): array
+    {
+        @set_time_limit(120);
+
+        $ts = (int) MicrovixProduto::max('ts');
+        $paginas = 0;
+        $upserts = 0;
+        $concluido = false;
+
+        while ($paginas < $maxPaginas) {
+            $regs = $this->chamar('LinxProdutos', [
+                'dt_update_inicio' => '2000-01-01',
+                'dt_update_fim'    => now()->addDay()->format('Y-m-d'),
+                'timestamp'        => (string) $ts,
+            ], 60);
+            if (empty($regs)) {
+                $concluido = true;
+                break;
+            }
+            $paginas++;
+
+            $agora = now();
+            $linhas = [];
+            $maxTs = $ts;
+            foreach ($regs as $r) {
+                $cp = trim((string) ($r['cod_produto'] ?? ''));
+                $rts = (int) ($r['timestamp'] ?? 0);
+                $maxTs = max($maxTs, $rts);
+                if ($cp !== '') {
+                    $linhas[$cp] = [
+                        'cod_produto' => $cp,
+                        'nome'        => mb_substr(trim((string) ($r['nome'] ?? '')), 0, 255),
+                        'referencia'  => mb_substr(trim((string) ($r['referencia'] ?? '')), 0, 120) ?: null,
+                        'desativado'  => strtoupper((string) ($r['desativado'] ?? '')) === 'S',
+                        'ts'          => $rts,
+                        'created_at'  => $agora,
+                        'updated_at'  => $agora,
+                    ];
+                }
+            }
+
+            foreach (array_chunk(array_values($linhas), 500) as $bloco) {
+                MicrovixProduto::upsert($bloco, ['cod_produto'], ['nome', 'referencia', 'desativado', 'ts', 'updated_at']);
+            }
+            $upserts += count($linhas);
+
+            if (count($regs) < self::PAGINA || $maxTs <= $ts) {
+                $concluido = true;
+                break;
+            }
+            $ts = $maxTs;
+        }
+
+        if ($upserts > 0) {
+            $this->atualizarReferencias();
+        }
+
+        return [
+            'paginas'   => $paginas,
+            'upserts'   => $upserts,
+            'concluido' => $concluido,
+            'total'     => MicrovixProduto::count(),
+        ];
+    }
+
+    /**
+     * Leva a referência atual do Microvix para os produtos já endereçados
+     * (campo sku). Acha o produto do Microvix pelo código interno ou, para
+     * itens que vieram da base de apoio, pelo código de barras — e nesse
+     * caso também grava o código interno, para ficarem ligados ao Microvix.
+     */
+    public function atualizarReferencias(): int
+    {
+        $produtos = Product::query()->get(['id', 'codigo_microvix', 'codigo_barras', 'sku']);
+        $mvx = MicrovixProduto::query()
+            ->whereIn('cod_produto', $produtos->pluck('codigo_microvix')->filter()->all())
+            ->pluck('referencia', 'cod_produto');
+        $porBarra = MicrovixBarra::query()
+            ->whereIn('cod_barra', $produtos->pluck('codigo_barras')->filter()->all())
+            ->pluck('cod_produto', 'cod_barra');
+        $refPorBarra = MicrovixProduto::query()
+            ->whereIn('cod_produto', $porBarra->values()->unique()->all())
+            ->pluck('referencia', 'cod_produto');
+        $codigosEmUso = $produtos->pluck('codigo_microvix')->filter()->flip();
+
+        $alterados = 0;
+        foreach ($produtos as $p) {
+            if ($p->codigo_microvix && $mvx->has($p->codigo_microvix)) {
+                $ref = $mvx[$p->codigo_microvix];
+            } elseif ($p->codigo_barras && ($cod = $porBarra[$p->codigo_barras] ?? null) && $refPorBarra->has($cod)) {
+                $ref = $refPorBarra[$cod];
+                if (! $codigosEmUso->has($cod)) {
+                    $p->codigo_microvix = $cod;
+                    $codigosEmUso[$cod] = true;
+                }
+            } else {
+                continue;
+            }
+
+            if ($ref && $p->sku !== $ref) {
+                $p->sku = $ref;
+            }
+            if ($p->isDirty()) {
+                $p->save();
+                $alterados++;
+            }
+        }
+
+        return $alterados;
+    }
+
+    /**
+     * Busca na base local do Microvix por nome ou referência. Pré-filtra no
+     * banco pelas palavras digitadas e ranqueia com a busca tolerante a erro.
+     */
+    public function buscarTexto(string $termo, BuscaProdutos $busca, int $max = 15): array
+    {
+        $palavras = array_values(array_filter(
+            preg_split('/\s+/', trim($termo)),
+            fn ($w) => mb_strlen($w) >= 3
+        ));
+        if (! $palavras) {
+            return ['exatos' => collect(), 'parecidos' => collect()];
+        }
+
+        $candidatos = MicrovixProduto::query()
+            ->where(function ($q) use ($palavras, $termo) {
+                $q->where('referencia', trim($termo));
+                foreach ($palavras as $w) {
+                    $q->orWhere('nome', 'like', "%{$w}%")->orWhere('referencia', 'like', "%{$w}%");
+                }
+            })
+            ->limit(3000)
+            ->get(['cod_produto', 'nome', 'referencia', 'desativado']);
+
+        return $busca->ranquear(
+            $candidatos,
+            fn (MicrovixProduto $m) => trim("{$m->nome} {$m->referencia}"),
+            fn (MicrovixProduto $m) => [$m->cod_produto, $m->referencia],
+            $termo,
+            $max,
+            10
+        );
     }
 
     /* ======================================================================

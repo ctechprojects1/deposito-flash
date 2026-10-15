@@ -46,6 +46,7 @@ class LocationController extends Controller
                             'product_id'      => $stock->product_id,
                             'codigo_microvix' => $stock->product?->codigo_microvix,
                             'codigo_barras'   => $stock->product?->codigo_barras,
+                            'sku'             => $stock->product?->sku,
                             'nome'            => $stock->product?->nome,
                             'quantidade'      => (float) $stock->quantidade,
                         ];
@@ -78,6 +79,7 @@ class LocationController extends Controller
                     'stock_id'        => $stock->id,
                     'product_id'      => $stock->product_id,
                     'codigo_microvix' => $stock->product?->codigo_microvix,
+                    'sku'             => $stock->product?->sku,
                     'nome'            => $stock->product?->nome,
                     'quantidade'      => (float) $stock->quantidade,
                 ])->values(),
@@ -307,7 +309,8 @@ class LocationController extends Controller
                     && ! Product::where('codigo_barras', $codBarras)->where('id', '!=', $product->id)->exists()) {
                     $product->codigo_barras = $codBarras;
                 }
-                if (! $product->sku && $sku) {
+                // Sem SKU, ou veio do Microvix com a referência mais nova.
+                if ($sku && (! $product->sku || $product->codigo_microvix === $codMicrovix)) {
                     $product->sku = $sku;
                 }
                 if ($product->isDirty()) {

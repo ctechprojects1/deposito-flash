@@ -385,6 +385,7 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                     )}
                     <div className="flex flex-wrap gap-x-3 font-mono text-xs text-slate-400">
                       {p.codigo_microvix && <span>MVX: {p.codigo_microvix}</span>}
+                      {p.sku && p.sku !== p.codigo_microvix && <span>Ref: {p.sku}</span>}
                       {p.codigo_barras && <span>Barras: {p.codigo_barras}</span>}
                     </div>
                   </div>
@@ -495,7 +496,10 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                         {consulta.produto.fonte ? (
                           <span>SKU: {consulta.produto.sku || "—"}</span>
                         ) : (
-                          <span>Cód. interno: {consulta.produto.cod_produto || "—"}</span>
+                          <>
+                            <span>Cód. interno: {consulta.produto.cod_produto || "—"}</span>
+                            <span>Ref: {consulta.produto.sku || "—"}</span>
+                          </>
                         )}
                         <span>Barras: {consulta.produto.cod_barra || "—"}</span>
                       </div>
@@ -749,7 +753,7 @@ function BuscaNaBase({ termoInicial = "", onEscolher }) {
 
   return (
     <div className="mt-3 rounded-lg bg-white p-2 text-slate-700 ring-1 ring-amber-200">
-      <div className="mb-1 text-xs font-semibold text-amber-800">Procurar na base de apoio (Shopee) pelo nome ou SKU:</div>
+      <div className="mb-1 text-xs font-semibold text-amber-800">Procurar no Microvix e na base de apoio (Shopee) pelo nome, referência ou SKU:</div>
       <input
         value={termo}
         onChange={(e) => setTermo(e.target.value)}
@@ -767,7 +771,16 @@ function BuscaNaBase({ termoInicial = "", onEscolher }) {
           >
             <span className="block font-semibold text-slate-800">{p.nome}</span>
             <span className="font-mono text-slate-400">
-              SKU {p.sku || "—"} · EAN {p.cod_barra || "—"}
+              {p.fonte ? (
+                <>
+                  <span className="font-sans font-bold uppercase text-amber-700">{p.fonte}</span> · SKU {p.sku || "—"} · EAN {p.cod_barra || "—"}
+                </>
+              ) : (
+                <>
+                  <span className="font-sans font-bold uppercase text-emerald-700">Microvix</span> · Cód. {p.cod_produto} · Ref. {p.sku || "—"}
+                  {p.desativado && <span className="font-sans font-bold text-amber-700"> · desativado</span>}
+                </>
+              )}
             </span>
           </button>
         ))}

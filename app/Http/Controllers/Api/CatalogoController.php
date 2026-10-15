@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CatalogoProduto;
+use App\Models\MicrovixBarra;
+use App\Models\MicrovixProduto;
 use App\Services\BuscaProdutos;
+use App\Services\MicrovixService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -75,15 +78,19 @@ class CatalogoController extends Controller
     }
 
     /**
-     * Busca na base de apoio por SKU, EAN ou nome (tolerante a erro).
+     * Busca pelo nome, referência/SKU ou EAN (tolerante a erro): primeiro na
+     * base local do Microvix (referência sempre atualizada), depois na base
+     * de apoio.
      * GET /api/catalogo/buscar?q=...
      */
-    public function buscar(Request $request, BuscaProdutos $busca): JsonResponse
+    public function buscar(Request $request, BuscaProdutos $busca, MicrovixService $microvix): JsonResponse
     {
         $q = trim((string) $request->query('q', ''));
         if ($q === '') {
             return response()->json(['data' => [], 'sugestoes' => []]);
         }
+
+        $mvx = $microvix->buscarTexto($q, $busca);
 
         $r = $busca->ranquear(
             CatalogoProduto::query()->get(['id', 'fonte', 'nome', 'variacao', 'sku', 'sku_pai', 'ean']),
@@ -94,12 +101,30 @@ class CatalogoController extends Controller
             10
         );
 
+        $barras = MicrovixBarra::query()
+            ->whereIn('cod_produto', $mvx['exatos']->merge($mvx['parecidos'])->map(fn ($x) => $x['item']->cod_produto)->all())
+            ->whereColumn('cod_barra', '!=', 'cod_produto')
+            ->pluck('cod_barra', 'cod_produto');
+        $fmtMvx = fn ($x) => self::formatarMicrovix($x['item'], $barras[$x['item']->cod_produto] ?? '');
         $fmt = fn ($x) => self::formatar($x['item']);
 
         return response()->json([
-            'data'      => $r['exatos']->map($fmt)->values(),
-            'sugestoes' => $r['parecidos']->map($fmt)->values(),
+            'data'      => $mvx['exatos']->map($fmtMvx)->concat($r['exatos']->map($fmt))->take(25)->values(),
+            'sugestoes' => $mvx['parecidos']->map($fmtMvx)->concat($r['parecidos']->map($fmt))->take(15)->values(),
         ]);
+    }
+
+    /** Produto do Microvix no mesmo formato da consulta por código. */
+    public static function formatarMicrovix(MicrovixProduto $m, string $codBarra = ''): array
+    {
+        return [
+            'nome'        => $m->nome,
+            'cod_produto' => $m->cod_produto,
+            'cod_barra'   => $codBarra,
+            'sku'         => $m->referencia ?? '',
+            'desativado'  => $m->desativado,
+            'fonte'       => null,
+        ];
     }
 
     /** Procura exata por código (SKU, SKU de referência ou EAN). */

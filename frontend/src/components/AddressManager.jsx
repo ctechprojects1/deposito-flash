@@ -48,7 +48,7 @@ export default function AddressManager({ times = [], posicoes = [], alfabetica =
     try {
       for (let i = 0; i < 40; i++) {
         const r = await sincronizarMicrovix();
-        setSyncMvx(`Sincronizando... ${Number(r.total).toLocaleString("pt-BR")} códigos`);
+        setSyncMvx(`Sincronizando... ${Number(r.total).toLocaleString("pt-BR")} códigos · ${Number(r.produtos ?? 0).toLocaleString("pt-BR")} produtos`);
         if (r.concluido) break;
       }
       await carregarStatusMvx();
@@ -214,18 +214,19 @@ export default function AddressManager({ times = [], posicoes = [], alfabetica =
 
           <BaseApoio />
 
-          {/* Base de códigos de barras do Microvix */}
+          {/* Base local do Microvix: códigos de barras + produtos (nome e referência) */}
           <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-4">
-            <h3 className="text-sm font-bold text-slate-700">Microvix — códigos de barras</h3>
+            <h3 className="text-sm font-bold text-slate-700">Microvix — códigos de barras e referências</h3>
             <p className="mt-1 text-xs text-slate-600">
               {mvx
                 ? mvx.total > 0
-                  ? `${Number(mvx.total).toLocaleString("pt-BR")} códigos na base · atualizada em ${mvx.ultima_sync}`
+                  ? `${Number(mvx.total).toLocaleString("pt-BR")} códigos e ${Number(mvx.produtos ?? 0).toLocaleString("pt-BR")} produtos na base · atualizada em ${mvx.ultima_sync}`
                   : "Base ainda não sincronizada. Sincronize antes de bipar produtos."
                 : "Carregando..."}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              A busca já atualiza sozinha quando um código não é encontrado. Use o botão para forçar.
+              A busca já atualiza sozinha quando um código não é encontrado. Use o botão para forçar
+              (também atualiza a referência dos produtos já endereçados).
             </p>
             <button type="button" onClick={sincronizarMvx} disabled={!!syncMvx} className="btn-ghost mt-3">
               {syncMvx || "Sincronizar agora"}

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MicrovixBarra;
+use App\Models\MicrovixProduto;
 use App\Services\MicrovixService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -40,8 +41,8 @@ class MicrovixController extends Controller
     }
 
     /**
-     * Sincroniza um lote da base de códigos de barras (a tela chama em loop
-     * até concluido=true).
+     * Sincroniza um lote da base local: primeiro os códigos de barras, depois
+     * os produtos (nome + referência). A tela chama em loop até concluido=true.
      * POST /api/microvix/sincronizar
      */
     public function sincronizar(): JsonResponse
@@ -50,7 +51,20 @@ class MicrovixController extends Controller
             return response()->json(['message' => 'Integração Microvix não configurada.'], 422);
         }
 
-        return response()->json($this->microvix->sincronizarBarras(3));
+        $barras = $this->microvix->sincronizarBarras(3);
+        if (! $barras['concluido']) {
+            return response()->json($barras + ['produtos' => MicrovixProduto::count()]);
+        }
+
+        $produtos = $this->microvix->sincronizarProdutos(3);
+
+        return response()->json([
+            'paginas'   => $barras['paginas'] + $produtos['paginas'],
+            'upserts'   => $barras['upserts'] + $produtos['upserts'],
+            'concluido' => $produtos['concluido'],
+            'total'     => $barras['total'],
+            'produtos'  => $produtos['total'],
+        ]);
     }
 
     /**
@@ -61,6 +75,7 @@ class MicrovixController extends Controller
     {
         return response()->json([
             'total'         => MicrovixBarra::count(),
+            'produtos'      => MicrovixProduto::count(),
             'ultima_sync'   => optional(MicrovixBarra::max('updated_at'), fn ($d) => \Illuminate\Support\Carbon::parse($d)->format('d/m/Y H:i')),
             'configurado'   => $this->microvix->configurado(),
         ]);
