@@ -66,7 +66,8 @@ class Cloud
                 'bucket' => $disk['bucket'],
                 'url' => $disk['url'],
                 'endpoint' => $disk['endpoint'],
-                'region' => 'auto',
+                'region' => $disk['region'] ?? 'auto',
+                'credentials' => $disk['credentials'] ?? null,
                 'use_path_style_endpoint' => false,
                 'throw' => false,
                 'report' => false,
@@ -178,6 +179,7 @@ class Cloud
 
         $app['config']->set('logging.channels.laravel-cloud-socket', [
             'driver' => 'monolog',
+            'level' => $_ENV['LOG_LEVEL'] ?? $_SERVER['LOG_LEVEL'] ?? 'debug',
             'handler' => SocketHandler::class,
             'formatter' => LaravelCloudJsonFormatter::class,
             'formatter_with' => [

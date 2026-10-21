@@ -17,3 +17,8 @@ deployment:
     - /bin/cp artisan "$DEPLOYPATH"
     - /bin/cp composer.json "$DEPLOYPATH"
     - /bin/cp composer.lock "$DEPLOYPATH"
+    # Limpa e refaz os caches do Laravel (config, rotas, views) a cada deploy;
+    # sem isso, um cache antigo pode derrubar o site após atualizar o framework.
+    # O cPanel não tem Terminal nesta conta, por isso roda aqui. Usa o PHP mais
+    # novo (>= 8.2, exigido pelo Laravel 12) instalado; senão, o "php" padrão.
+    - PHP_BIN=php; for v in 85 84 83 82; do if [ -x "/opt/cpanel/ea-php$v/root/usr/bin/php" ]; then PHP_BIN="/opt/cpanel/ea-php$v/root/usr/bin/php"; break; fi; done; cd "$DEPLOYPATH" && "$PHP_BIN" artisan optimize:clear && "$PHP_BIN" artisan config:cache && "$PHP_BIN" artisan route:cache && "$PHP_BIN" artisan view:cache

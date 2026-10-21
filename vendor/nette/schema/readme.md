@@ -1,7 +1,6 @@
 # Nette Schema
 
 [![Downloads this Month](https://img.shields.io/packagist/dm/nette/schema.svg)](https://packagist.org/packages/nette/schema)
-[![Tests](https://github.com/nette/schema/workflows/Tests/badge.svg?branch=master)](https://github.com/nette/schema/actions)
 [![Coverage Status](https://coveralls.io/repos/github/nette/schema/badge.svg?branch=master)](https://coveralls.io/github/nette/schema?branch=master)
 [![Latest Stable Version](https://poser.pugx.org/nette/schema/v/stable)](https://github.com/nette/schema/releases)
 [![License](https://img.shields.io/badge/license-New%20BSD-blue.svg)](https://github.com/nette/schema/blob/master/license.md)
@@ -20,7 +19,7 @@ Installation:
 composer require nette/schema
 ```
 
-It requires PHP version 8.1 and supports PHP up to 8.5.
+It requires PHP version 8.1 and supports PHP up to 8.6.
 
 
 [Support Me](https://github.com/sponsors/dg)
@@ -126,7 +125,7 @@ Expect::null()
 Expect::array($default = [])
 ```
 
-And then all types [supported by the Validators](https://doc.nette.org/validators#toc-validation-rules) via `Expect::type('scalar')` or abbreviated `Expect::scalar()`. Also class or interface names are accepted, e.g. `Expect::type('AddressEntity')`.
+And then all types [supported by the Validators](https://doc.nette.org/validators#toc-expected-types) via `Expect::type('scalar')` or abbreviated `Expect::scalar()`. Also class or interface names are accepted, e.g. `Expect::type('AddressEntity')`.
 
 You can also use union notation:
 
@@ -314,9 +313,11 @@ Expect::array()->min(10)->max(20);
 For strings, limit their length:
 
 ```php
-// string, at least 10 characters long, maximum 20 characters
+// string, at least 10 bytes long, maximum 20 bytes
 Expect::string()->min(10)->max(20);
 ```
+
+The length of a string is measured in bytes. To count characters of a UTF-8 string, use `Expect::unicode()`.
 
 For numbers, limit their value:
 
@@ -328,7 +329,7 @@ Expect::int()->min(10)->max(20);
 Of course, it is possible to mention only `min()`, or only `max()`:
 
 ```php
-// string, maximum 20 characters
+// string, maximum 20 bytes
 Expect::string()->max(20);
 ```
 

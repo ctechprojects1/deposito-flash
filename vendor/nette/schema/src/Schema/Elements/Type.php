@@ -7,18 +7,15 @@
 
 namespace Nette\Schema\Elements;
 
-use Nette\Schema\Context;
-use Nette\Schema\DynamicParameter;
-use Nette\Schema\Helpers;
-use Nette\Schema\Schema;
-use function array_key_exists, array_pop, implode, is_array, str_replace, strpos;
+use Nette\Schema\{Context, DynamicParameter, Helpers, Message, Schema};
+use Nette\Utils\Validators;
+use function array_key_exists, is_array, is_int, is_string;
 
 
 final class Type implements Schema
 {
 	use Base;
 
-	private string $type;
 	private ?Schema $itemsValue = null;
 	private ?Schema $itemsKey = null;
 
@@ -28,14 +25,17 @@ final class Type implements Schema
 	private bool $merge = true;
 
 
-	public function __construct(string $type)
-	{
+	public function __construct(
+		private string $type,
+	) {
 		$defaults = ['list' => [], 'array' => []];
-		$this->type = $type;
 		$this->default = strpos($type, '[]') ? [] : $defaults[$type] ?? null;
 	}
 
 
+	/**
+	 * Allows the value to be null in addition to the declared type.
+	 */
 	public function nullable(): self
 	{
 		$this->type = 'null|' . $this->type;
@@ -43,6 +43,9 @@ final class Type implements Schema
 	}
 
 
+	/**
+	 * Controls whether the default value is merged with the input array (enabled by default).
+	 */
 	public function mergeDefaults(bool $state = true): self
 	{
 		$this->merge = $state;
@@ -50,6 +53,9 @@ final class Type implements Schema
 	}
 
 
+	/**
+	 * Allows the value to be a DynamicParameter, which is recorded for deferred validation.
+	 */
 	public function dynamic(): self
 	{
 		$this->type = DynamicParameter::class . '|' . $this->type;
@@ -86,6 +92,9 @@ final class Type implements Schema
 	}
 
 
+	/**
+	 * Sets a regex pattern the string value must match entirely (anchored to start and end).
+	 */
 	public function pattern(?string $pattern): self
 	{
 		$this->pattern = $pattern;
@@ -111,6 +120,17 @@ final class Type implements Schema
 				$key = $this->itemsKey
 					? $this->itemsKey->normalize($key, $context)
 					: $key;
+				if (!is_int($key) && !is_string($key)) {
+					$context->addError(
+						'The %label% %path% expects to be int|string, %value% given.',
+						Message::TypeMismatch,
+						['value' => $key, 'expected' => 'int|string'],
+					);
+					$context->isKey = false;
+					array_pop($context->path);
+					continue;
+				}
+
 				$context->isKey = false;
 				$res[$key] = $this->itemsValue->normalize($val, $context);
 				array_pop($context->path);
@@ -162,7 +182,7 @@ final class Type implements Schema
 			$merge = false;
 		}
 
-		if ($value === null && is_array($this->default)) {
+		if ($value === null && is_array($this->default) && !Validators::is(null, $this->type)) {
 			$value = []; // is unable to distinguish null from array in NEON
 		}
 
@@ -173,13 +193,13 @@ final class Type implements Schema
 		$isOk() && Helpers::validateRange($value, $this->range, $context, $this->type);
 		$isOk() && $value !== null && $this->pattern !== null && Helpers::validatePattern($value, $this->pattern, $context);
 		$isOk() && is_array($value) && $this->validateItems($value, $context);
-		$isOk() && $merge && $value = Helpers::merge($value, $this->default);
+		$isOk() && $merge && $value !== null && $value = Helpers::merge($value, $this->default);
 		$isOk() && $value = $this->doTransform($value, $context);
 		if (!$isOk()) {
 			return null;
 		}
 
-		if ($value instanceof DynamicParameter) {
+		if ($value instanceof DynamicParameter && $this->type !== DynamicParameter::class) {
 			$expected = $this->type . ($this->range === [null, null] ? '' : ':' . implode('..', $this->range));
 			$context->dynamics[] = [$value, str_replace(DynamicParameter::class . '|', '', $expected), $context->path];
 		}
@@ -190,7 +210,7 @@ final class Type implements Schema
 	/** @param  array<mixed>  $value */
 	private function validateItems(array &$value, Context $context): void
 	{
-		if (!$this->itemsValue) {
+		if (!($itemsValue = $this->itemsValue)) {
 			return;
 		}
 
@@ -198,9 +218,23 @@ final class Type implements Schema
 		foreach ($value as $key => $val) {
 			$context->path[] = $key;
 			$context->isKey = true;
+			$isKeyOk = $context->createChecker();
 			$key = $this->itemsKey ? $this->itemsKey->complete($key, $context) : $key;
+			if ($isKeyOk() && !is_int($key) && !is_string($key)) {
+				$context->addError(
+					'The %label% %path% expects to be int|string, %value% given.',
+					Message::TypeMismatch,
+					['value' => $key, 'expected' => 'int|string'],
+				);
+			}
+
 			$context->isKey = false;
-			$res[$key ?? ''] = $this->itemsValue->complete($val, $context);
+			$keyOk = $isKeyOk();
+			$val = $itemsValue->complete($val, $context);
+			if ($keyOk) {
+				$res[$key] = $val;
+			}
+
 			array_pop($context->path);
 		}
 		$value = $res;
