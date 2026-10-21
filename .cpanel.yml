@@ -10,7 +10,14 @@ deployment:
     - /bin/cp -R bootstrap "$DEPLOYPATH"
     - /bin/cp -R config "$DEPLOYPATH"
     - /bin/cp -R database "$DEPLOYPATH"
-    - /bin/cp -R public "$DEPLOYPATH"
+    # public/ é copiado SEM o .htaccess: o MultiPHP Manager do cPanel grava
+    # nele a linha (AddHandler) que define a versão do PHP do subdomínio, e
+    # copiar a versão do repositório por cima voltaria o site para a versão
+    # herdada da conta a cada deploy. Mudanças no public/.htaccess do
+    # repositório precisam ser aplicadas à mão no servidor. Só é copiado se
+    # ainda não existir lá (primeira instalação).
+    - /usr/bin/find public -type f ! -name .htaccess -exec /bin/cp --parents {} "$DEPLOYPATH" \;
+    - '[ -f "$DEPLOYPATH/public/.htaccess" ] || /bin/cp public/.htaccess "$DEPLOYPATH/public/.htaccess"'
     - /bin/cp -R resources "$DEPLOYPATH"
     - /bin/cp -R routes "$DEPLOYPATH"
     - /bin/cp -R vendor "$DEPLOYPATH"
