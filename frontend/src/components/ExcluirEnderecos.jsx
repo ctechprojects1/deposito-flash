@@ -1,31 +1,47 @@
 import { useMemo, useState } from "react";
 import { excluirEnderecos } from "../services/api";
 
+const timeDe = (e) => e.corredor || e.nome;
+const linhaDe = (e) => String(e.esteira || "");
+const porNumero = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true });
+
 /**
- * Seção do "Gerenciar endereços": escolhe o Time, marca as posições
- * (ou o Time inteiro) e exclui. Só endereço vazio pode ser excluído.
+ * Seção do "Gerenciar endereços": escolhe um Time (coluna) ou uma linha
+ * (posição: 1A, 6...), marca os endereços (ou o Time / a linha inteira) e
+ * exclui. Só endereço vazio pode ser excluído.
  */
 export default function ExcluirEnderecos({ enderecos = [], onExcluidos }) {
-  const [time, setTime] = useState("");
+  const [modo, setModo] = useState("time"); // "time" | "linha"
+  const [grupo, setGrupo] = useState("");
   const [marcados, setMarcados] = useState([]);
   const [excluindo, setExcluindo] = useState(false);
   const [resultado, setResultado] = useState(null); // { ok, msg, bloqueados }
 
-  const times = useMemo(() => {
-    const set = new Set(enderecos.map((e) => e.corredor || e.nome));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [enderecos]);
+  const porLinha = modo === "linha";
+  const chaveDe = porLinha ? linhaDe : timeDe;
 
-  const doTime = useMemo(
+  const grupos = useMemo(() => {
+    const set = new Set(enderecos.map(chaveDe).filter((g) => g !== ""));
+    return Array.from(set).sort(porLinha ? porNumero : (a, b) => a.localeCompare(b));
+  }, [enderecos, chaveDe, porLinha]);
+
+  const doGrupo = useMemo(
     () =>
       enderecos
-        .filter((e) => (e.corredor || e.nome) === time)
-        .sort((a, b) => String(a.esteira).localeCompare(String(b.esteira), undefined, { numeric: true })),
-    [enderecos, time]
+        .filter((e) => chaveDe(e) === grupo)
+        .sort((a, b) => (porLinha ? timeDe(a).localeCompare(timeDe(b)) : porNumero(a.esteira, b.esteira))),
+    [enderecos, chaveDe, grupo, porLinha]
   );
 
-  function escolherTime(t) {
-    setTime(t === time ? "" : t);
+  function trocarModo(m) {
+    setModo(m);
+    setGrupo("");
+    setMarcados([]);
+    setResultado(null);
+  }
+
+  function escolherGrupo(g) {
+    setGrupo(g === grupo ? "" : g);
     setMarcados([]);
     setResultado(null);
   }
@@ -34,10 +50,10 @@ export default function ExcluirEnderecos({ enderecos = [], onExcluidos }) {
     setMarcados((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   }
 
-  const todos = doTime.length > 0 && marcados.length === doTime.length;
+  const todos = doGrupo.length > 0 && marcados.length === doGrupo.length;
 
   async function excluir() {
-    const nomes = doTime.filter((e) => marcados.includes(e.id)).map((e) => e.nome);
+    const nomes = doGrupo.filter((e) => marcados.includes(e.id)).map((e) => e.nome);
     if (!window.confirm(`Excluir ${nomes.length} endereço(s)?\n\n${nomes.join(", ")}\n\nEles somem do mapa. O histórico continua guardado.`)) return;
 
     setExcluindo(true);
@@ -62,39 +78,63 @@ export default function ExcluirEnderecos({ enderecos = [], onExcluidos }) {
         Só dá para excluir endereço <strong>vazio</strong> e que não esteja em solicitação ou contagem em aberto.
       </p>
 
-      {times.length === 0 ? (
-        <p className="mt-3 text-xs text-slate-500">Nenhum endereço cadastrado.</p>
+      {enderecos.length > 0 && (
+        <div className="mt-3 inline-flex rounded-full bg-white p-0.5 shadow-sm">
+          {[
+            ["time", "Por Time (coluna)"],
+            ["linha", "Por linha (posição)"],
+          ].map(([m, rotulo]) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => modo !== m && trocarModo(m)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                modo === m ? "bg-rose-600 text-white shadow-sm" : "text-slate-500 hover:text-rose-600"
+              }`}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {grupos.length === 0 ? (
+        <p className="mt-3 text-xs text-slate-500">
+          {enderecos.length === 0 ? "Nenhum endereço cadastrado." : "Nenhum endereço com posição cadastrada."}
+        </p>
       ) : (
         <>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {times.map((t) => (
+            {grupos.map((g) => (
               <button
-                key={t}
+                key={g}
                 type="button"
-                onClick={() => escolherTime(t)}
+                onClick={() => escolherGrupo(g)}
                 className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                  time === t ? "bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-md shadow-rose-500/30" : "bg-white text-slate-600 shadow-sm hover:bg-rose-50"
+                  grupo === g ? "bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-md shadow-rose-500/30" : "bg-white text-slate-600 shadow-sm hover:bg-rose-50"
                 }`}
               >
-                {t}
+                {porLinha ? `Linha ${g}` : g}
               </button>
             ))}
           </div>
 
-          {time && (
+          {grupo && (
             <div className="mt-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-600">Posições de {time}</span>
+                <span className="text-xs font-semibold text-slate-600">
+                  {porLinha ? `Times na linha ${grupo}` : `Posições de ${grupo}`}
+                </span>
                 <button
                   type="button"
-                  onClick={() => setMarcados(todos ? [] : doTime.map((e) => e.id))}
+                  onClick={() => setMarcados(todos ? [] : doGrupo.map((e) => e.id))}
                   className="text-xs font-semibold text-rose-600 hover:underline"
                 >
-                  {todos ? "Desmarcar todas" : "Marcar o Time inteiro"}
+                  {todos ? "Desmarcar todas" : porLinha ? "Marcar a linha inteira" : "Marcar o Time inteiro"}
                 </button>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {doTime.map((e) => {
+                {doGrupo.map((e) => {
                   const on = marcados.includes(e.id);
                   const qtd = Number(e.total_quantidade || 0);
                   return (
@@ -107,7 +147,7 @@ export default function ExcluirEnderecos({ enderecos = [], onExcluidos }) {
                         on ? "bg-rose-600 text-white shadow-md shadow-rose-500/30" : "bg-white text-slate-600 shadow-sm hover:bg-rose-50"
                       }`}
                     >
-                      {e.esteira || e.nome}
+                      {porLinha ? timeDe(e) : e.esteira || e.nome}
                       {qtd > 0 && <span className={on ? "ml-1 text-rose-100" : "ml-1 text-amber-600"}>· {qtd} un</span>}
                     </button>
                   );
