@@ -88,6 +88,7 @@ class BuscaProdutos
             'nome'            => $p->nome,
             'codigo_microvix' => $p->codigo_microvix,
             'codigo_barras'   => $p->codigo_barras,
+            'sku'             => $p->sku,
             'total'           => (float) $p->stocks->sum('quantidade'),
             'localizacoes'    => $locs,
             'semelhanca'      => $item['nota'],

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { relatorioProdutoLocalizacao } from "../services/api";
 import HistoricoEstoque from "./HistoricoEstoque";
+import { refProduto } from "../refProduto";
 
 // Lista de relatórios disponíveis (fácil de crescer no futuro).
 const RELATORIOS = [
@@ -105,7 +106,11 @@ function ProdutoLocalizacao() {
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-slate-800">{p.nome}</span>
-                    <span className="font-mono text-xs text-slate-400">cód. {p.codigo_microvix}{p.codigo_barras && ` · barras ${p.codigo_barras}`}</span>
+                    <span className="font-mono text-xs text-slate-400">
+                      cód. {p.codigo_microvix}
+                      {refProduto(p) && ` · ref. ${refProduto(p)}`}
+                      {p.codigo_barras && ` · barras ${p.codigo_barras}`}
+                    </span>
                   </span>
                   <span className="whitespace-nowrap text-xs font-semibold text-indigo-600">{p.total} un · ver</span>
                 </button>
@@ -129,6 +134,7 @@ function ProdutoLocalizacao() {
                 <h3 className="text-lg font-bold text-slate-800">{p.nome}</h3>
                 <div className="flex flex-wrap gap-x-3 font-mono text-xs text-slate-400">
                   {p.codigo_microvix && <span>MVX: {p.codigo_microvix}</span>}
+                  {refProduto(p) && <span>Ref: {refProduto(p)}</span>}
                   {p.codigo_barras && <span>Barras: {p.codigo_barras}</span>}
                 </div>
               </div>

@@ -272,6 +272,7 @@ class LocationController extends Controller
         ], [
             'nome.regex' => 'A descrição precisa ter o nome do produto (não só números). Confira se a quantidade não foi digitada no campo Descrição.',
             'nome.min'   => 'A descrição precisa ter o nome do produto. Confira se a quantidade não foi digitada no campo Descrição.',
+            'nome.max'   => 'A descrição pode ter no máximo 191 caracteres. Encurte o texto da descrição.',
         ]);
 
         $codMicrovix = $dados['codigo_microvix'] ?? null;
@@ -346,6 +347,7 @@ class LocationController extends Controller
         ], [
             'nome.regex' => 'A descrição precisa ter o nome do produto (não só números).',
             'nome.min'   => 'A descrição precisa ter o nome do produto (não só números).',
+            'nome.max'   => 'A descrição pode ter no máximo 191 caracteres.',
         ]);
 
         $product->update(['nome' => trim($dados['nome'])]);

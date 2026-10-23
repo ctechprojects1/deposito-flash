@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { extrairDocumento, criarSolicitacao } from "../services/api";
 import BuscaProduto from "./BuscaProduto";
+import { refProduto } from "../refProduto";
 
 const TIPOS = { pedido: "Pedido de venda", nfe: "NF-e", documento_interno: "Documento interno" };
 
@@ -345,7 +346,10 @@ function LinhaNaoEncontrada({ item, onVincular }) {
             className="rounded-full bg-white px-3 py-1 text-left text-xs shadow-sm ring-1 ring-amber-200 transition hover:-translate-y-0.5 hover:bg-amber-50"
           >
             <span className="font-semibold text-slate-700">{p.nome}</span>
-            <span className="ml-1 font-mono text-slate-400">cód. {p.codigo_microvix}</span>
+            <span className="ml-1 font-mono text-slate-400">
+              cód. {p.codigo_microvix}
+              {refProduto(p) && ` · ref. ${refProduto(p)}`}
+            </span>
             <span className="ml-1 font-bold text-indigo-600">{p.total} un</span>
           </button>
         ))}

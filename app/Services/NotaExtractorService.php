@@ -109,6 +109,28 @@ PROMPT;
         ];
     }
 
+    /**
+     * Explica o erro da API da Anthropic para quem está na tela, com o
+     * detalhe original (em inglês) para facilitar o diagnóstico.
+     */
+    private function mensagemDeErro(int $status, string $detalhe): string
+    {
+        $d = strtolower($detalhe);
+        $msg = match (true) {
+            $status === 401 => 'Chave da API da Anthropic inválida ou revogada (ANTHROPIC_API_KEY no .env do servidor).',
+            $status === 402 || str_contains($d, 'credit balance') => 'Sem crédito na conta da Anthropic. Adicione crédito no console da Anthropic.',
+            $status === 403 => 'A chave da API da Anthropic não tem permissão para usar este modelo.',
+            $status === 413 => 'O PDF é grande demais para a leitura automática. Divida o PDF em partes menores.',
+            $status === 429 => 'Limite de uso da API da Anthropic atingido. Aguarde um minuto e tente de novo.',
+            $status >= 500 => 'O serviço de leitura da Anthropic está instável no momento. Tente de novo em instantes.',
+            $status === 400 && (str_contains($d, 'pdf') || str_contains($d, 'document') || str_contains($d, 'password') || str_contains($d, 'page'))
+                => 'A Anthropic não conseguiu abrir este PDF (corrompido, protegido por senha ou com páginas demais). Gere o PDF de novo pelo Microvix e tente outra vez.',
+            default => 'Falha na leitura do documento (HTTP ' . $status . ').',
+        };
+
+        return $detalhe !== '' ? $msg . ' Detalhe: ' . mb_substr($detalhe, 0, 200) : $msg;
+    }
+
     private function chamarClaude(array $content, int $maxTokens): array
     {
         @set_time_limit(0); // leitura pode passar de 30s em documento grande
@@ -134,7 +156,7 @@ PROMPT;
 
             if ($response->failed()) {
                 Log::error('NotaExtractor HTTP ' . $response->status() . ': ' . mb_substr($response->body(), 0, 500));
-                return ['erro' => 'Falha na leitura do documento (HTTP ' . $response->status() . '). Tente de novo.'];
+                return ['erro' => $this->mensagemDeErro($response->status(), (string) $response->json('error.message', ''))];
             }
 
             $json = $response->json();

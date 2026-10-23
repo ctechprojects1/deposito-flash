@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchLocations } from "../services/api";
 import { useAuth } from "../AuthContext";
+import { refProduto } from "../refProduto";
 import LocationModal from "./LocationModal";
 import useAutoRefresh from "../hooks/useAutoRefresh";
 import AddressManager from "./AddressManager";
@@ -124,7 +125,8 @@ export default function StockMap() {
           <div className="min-w-0">
             <div className="truncate font-bold text-slate-800">{destaque.nome}</div>
             <div className="font-mono text-xs text-slate-400">
-              cód. {destaque.codigo_microvix} · {destaque.total} un em {destaque.localizacoes.length} endereço(s)
+              cód. {destaque.codigo_microvix}
+              {refProduto(destaque) && ` · ref. ${refProduto(destaque)}`} · {destaque.total} un em {destaque.localizacoes.length} endereço(s)
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {destaque.localizacoes.map((l) => (

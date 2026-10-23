@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { buscarProdutosMapa } from "../services/api";
+import { refProduto } from "../refProduto";
 
 /**
  * Busca de produto tolerante a erro (mapa, movimentação, solicitação):
@@ -115,7 +116,10 @@ function Opcao({ p, parecido = false, onClick }) {
     >
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold text-slate-800">{p.nome}</span>
-        <span className="font-mono text-xs text-slate-400">cód. {p.codigo_microvix}</span>
+        <span className="font-mono text-xs text-slate-400">
+          cód. {p.codigo_microvix}
+          {refProduto(p) && ` · ref. ${refProduto(p)}`}
+        </span>
       </span>
       <span className="whitespace-nowrap text-right text-xs">
         <span className="block font-bold text-indigo-600">{p.total} un</span>

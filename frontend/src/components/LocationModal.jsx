@@ -15,6 +15,9 @@ import {
   sincronizarMicrovix,
 } from "../services/api";
 
+// Tamanho máximo da descrição do produto (coluna products.nome).
+const MAX_DESCRICAO = 191;
+
 /**
  * Modal que lista os produtos guardados num endereço e permite (com permissão
  * gerenciar_enderecos) adicionar novos produtos, excluir e zerar o estoque.
@@ -222,7 +225,7 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
       const r = await consultarMicrovix(c);
       if (r.encontrado) {
         setConsulta({ status: "encontrado", produto: r.produto });
-        setNovo((n) => ({ ...n, quantidade: "" }));
+        setNovo((n) => ({ ...n, nome: r.produto.nome ?? "", quantidade: "" }));
         setTimeout(() => qtdRef.current?.focus(), 50);
       } else {
         setConsulta({ status: r.sync_pendente ? "sync_pendente" : "nao_encontrado", mensagem: r.mensagem });
@@ -269,10 +272,15 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
     let payload;
     if (consulta?.status === "encontrado") {
       const p = consulta.produto;
+      // A descrição vem do Microvix/base, mas pode ser editada (ex.: nome longo demais).
+      const nome = novo.nome.trim() || p.nome;
+      if (nome.length > MAX_DESCRICAO)
+        return setErroForm(`A descrição tem ${nome.length} caracteres; o máximo é ${MAX_DESCRICAO}. Encurte o texto acima.`);
+      if (!/\p{L}/u.test(nome)) return setErroForm("A descrição precisa ter o nome do produto (não só números).");
       // Produto da base de apoio (Shopee) não tem código Microvix: usa o SKU
       // como código até ser cruzado com o Microvix.
       payload = {
-        nome: p.nome,
+        nome,
         codigo_barras: p.cod_barra || null,
         codigo_microvix: p.cod_produto || p.sku || null,
         sku: p.sku || null,
@@ -281,6 +289,8 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
       if (!novo.nome.trim()) return setErroForm("A descrição é obrigatória.");
       if (!/\p{L}/u.test(novo.nome))
         return setErroForm("A descrição precisa ter o nome do produto (não só números). A quantidade vai no campo Quantidade.");
+      if (novo.nome.trim().length > MAX_DESCRICAO)
+        return setErroForm(`A descrição tem ${novo.nome.trim().length} caracteres; o máximo é ${MAX_DESCRICAO}.`);
       payload = {
         nome: novo.nome.trim(),
         codigo_barras: novo.codigo_barras.trim() || null,
@@ -356,6 +366,7 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                       <div className="flex items-center gap-1">
                         <input
                           value={renomeando.nome}
+                          maxLength={MAX_DESCRICAO}
                           onChange={(e) => setRenomeando((r) => ({ ...r, nome: e.target.value }))}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") salvarNome();
@@ -491,7 +502,26 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                           base {consulta.produto.fonte} · não está no Microvix
                         </span>
                       )}
-                      <div className="text-sm font-semibold text-slate-800">{consulta.produto.nome}</div>
+                      <textarea
+                        value={novo.nome}
+                        onChange={(e) => setNovo((n) => ({ ...n, nome: e.target.value }))}
+                        rows={3}
+                        title="Descrição que será gravada no endereço (pode editar)"
+                        className={`w-full resize-y rounded-lg border px-2 py-1.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 ${
+                          novo.nome.trim().length > MAX_DESCRICAO
+                            ? "border-rose-300 focus:ring-rose-200"
+                            : "border-slate-200 focus:ring-indigo-200"
+                        }`}
+                      />
+                      <div
+                        className={`text-right text-[11px] ${
+                          novo.nome.trim().length > MAX_DESCRICAO ? "font-semibold text-rose-600" : "text-slate-400"
+                        }`}
+                      >
+                        {novo.nome.trim().length > MAX_DESCRICAO
+                          ? `${novo.nome.trim().length}/${MAX_DESCRICAO} caracteres — encurte a descrição para adicionar`
+                          : `${novo.nome.trim().length}/${MAX_DESCRICAO} caracteres · pode editar a descrição`}
+                      </div>
                       <div className="mt-0.5 flex flex-wrap gap-x-3 font-mono text-xs text-slate-500">
                         {consulta.produto.fonte ? (
                           <span>SKU: {consulta.produto.sku || "—"}</span>
@@ -528,7 +558,7 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                         termoInicial={codigoBusca}
                         onEscolher={(produto) => {
                           setConsulta({ status: "encontrado", produto });
-                          setNovo((n) => ({ ...n, quantidade: "" }));
+                          setNovo((n) => ({ ...n, nome: produto.nome ?? "", quantidade: "" }));
                           setTimeout(() => qtdRef.current?.focus(), 50);
                         }}
                       />
@@ -557,6 +587,7 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
                           value={novo.nome}
                           onChange={(e) => setNovo((n) => ({ ...n, nome: e.target.value }))}
                           placeholder="Ex.: CABO HDMI 2M PRETO (não é a quantidade)"
+                          maxLength={MAX_DESCRICAO}
                           className="input-nuvem mt-1 font-normal"
                           autoFocus
                         />
