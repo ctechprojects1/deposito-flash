@@ -286,10 +286,24 @@ class LocationController extends Controller
                 $product = Product::where('codigo_microvix', $codMicrovix)->first();
             }
             if (! $product && $codBarras) {
-                $product = Product::where('codigo_barras', $codBarras)->first();
+                $porBarras = Product::where('codigo_barras', $codBarras)->first();
+                // Não reaproveita se o código de barras já for de OUTRO produto do Microvix
+                // (nem duplica o código de barras, que é único).
+                if ($porBarras && $codMicrovix && $porBarras->codigo_microvix
+                    && $porBarras->codigo_microvix !== $codMicrovix
+                    && $porBarras->codigo_microvix !== $porBarras->sku) {
+                    $codBarras = null;
+                } else {
+                    $product = $porBarras;
+                }
             }
-            if (! $product && $sku) {
-                $product = Product::where('sku', $sku)->first();
+            // Pelo SKU só para itens fora do Microvix (base Shopee, onde o SKU é o próprio
+            // código). No Microvix a referência se repete ("SALDO", "**", "Caixa2"...) e não
+            // identifica o produto: reaproveitar por ela trocava um produto por outro.
+            if (! $product && $sku && (! $codMicrovix || $codMicrovix === $sku)) {
+                $product = Product::where('sku', $sku)
+                    ->where(fn ($q) => $q->whereNull('codigo_microvix')->orWhereColumn('codigo_microvix', 'sku'))
+                    ->first();
             }
 
             if (! $product) {

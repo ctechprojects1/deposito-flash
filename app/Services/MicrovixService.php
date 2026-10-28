@@ -93,14 +93,19 @@ class MicrovixService
             $produto['cod_barra'] = $codigo;
         }
 
-        // 3) O valor digitado pode ser o código interno.
-        if (! $produto && ctype_digit($codigo) && strlen($codigo) <= 9) {
-            $produto = $this->buscarPorCodigo($codigo);
+        // 3) O valor digitado pode ser o código interno (com ou sem zeros à esquerda).
+        $semZeros = ltrim($codigo, '0');
+        if (! $produto && ctype_digit($codigo) && $semZeros !== '' && strlen($semZeros) <= 9) {
+            $produto = $this->buscarPorCodigo($semZeros);
         }
 
-        // 4) Último recurso: a referência (SKU) exata do Microvix.
-        if (! $produto && ($codRef = MicrovixProduto::where('referencia', $codigo)->value('cod_produto'))) {
-            $produto = $this->buscarPorCodigo((string) $codRef);
+        // 4) Último recurso: a referência (SKU) exata do Microvix — só se for de um
+        //    único produto ("SALDO", "**"... se repetem em centenas de produtos).
+        if (! $produto) {
+            $porRef = MicrovixProduto::where('referencia', $codigo)->limit(2)->pluck('cod_produto');
+            if ($porRef->count() === 1) {
+                $produto = $this->buscarPorCodigo((string) $porRef->first());
+            }
         }
 
         if ($produto) {
@@ -146,6 +151,14 @@ class MicrovixService
     public function codProdutoPorBarra(string $codBarra): ?string
     {
         $cod = MicrovixBarra::where('cod_barra', $codBarra)->value('cod_produto');
+
+        // Etiquetas impressas pelo Microvix completam o código com zeros à esquerda
+        // ("0000000019162"), mas a base guarda só "19162".
+        $semZeros = ltrim($codBarra, '0');
+        if ($cod === null && ctype_digit($codBarra) && $semZeros !== '' && $semZeros !== $codBarra) {
+            $cod = MicrovixBarra::where('cod_barra', $semZeros)->value('cod_produto');
+        }
+
         return $cod !== null ? (string) $cod : null;
     }
 
