@@ -3,11 +3,23 @@ import { useAuth } from "../AuthContext";
 import { rotuloCD } from "../rotuloCD";
 import { lerPlanilhaVendas } from "../vendasPlanilha";
 import { esc, imprimirLista } from "../imprimirLista";
+import { refProduto } from "../refProduto";
 import { importarVendas, listaEmbalagem, marcarEmbalados, painelVendas, separarVendas } from "../services/api";
 
 const msgErro = (e, padrao) => e?.response?.data?.message || e?.message || padrao;
 const agora = () => new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const un = (n) => `${Number(n || 0).toLocaleString("pt-BR")} un`;
+
+/** Códigos da linha: cód. interno, referência do sistema e SKU do anúncio (sem repetir). */
+function codigos(l) {
+  const ref = refProduto(l);
+  const anuncio = (l.skus_venda || []).filter((s) => s !== l.sku && s !== l.codigo_microvix);
+  return [
+    l.codigo_microvix && `cód. ${l.codigo_microvix}`,
+    ref && `ref. ${ref}`,
+    ...anuncio.map((s) => `SKU anúncio ${s}`),
+  ].filter(Boolean);
+}
 
 /**
  * Vendas da Shopee: sobe a planilha de pedidos "A Enviar", gera a separação
@@ -177,7 +189,7 @@ function Separacao({ painel, onCriada }) {
       for (const l of g.linhas) {
         h += `<div class="linha"><div class="caixa"></div><div class="corpo"><div class="nome">${esc(l.nome)}</div><div class="meta">${
           l.endereco ? esc(l.endereco) : '<span class="alerta">SEM ENDEREÇO</span>'
-        }${l.sku ? ` · SKU ${esc(l.sku)}` : ""}${l.codigo_microvix ? ` · cód. ${esc(l.codigo_microvix)}` : ""}</div><div class="meta forte">estoque ${l.estoque} · retira ${l.retira} · fica ${l.fica}</div></div><div class="qtd">${l.retira}</div></div>`;
+        }${codigos(l).map((c) => ` · ${esc(c)}`).join("")}</div><div class="meta forte">estoque ${l.estoque} · retira ${l.retira} · fica ${l.fica}</div></div><div class="qtd">${l.retira}</div></div>`;
       }
     }
     if (lista.sem_produto?.length) {
@@ -265,7 +277,7 @@ function Separacao({ painel, onCriada }) {
                     <div className="text-sm font-semibold text-slate-800">{l.nome}</div>
                     <div className="text-xs text-slate-500">
                       {l.endereco || <span className="font-semibold text-rose-600">sem endereço com saldo</span>}
-                      {l.sku && ` · SKU ${l.sku}`}
+                      {codigos(l).map((c) => ` · ${c}`).join("")}
                     </div>
                     <div className="text-xs font-bold text-indigo-900">
                       estoque {l.estoque} · retira {l.retira} · fica {l.fica}

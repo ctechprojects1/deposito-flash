@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Deposito;
 use App\Models\Product;
 use App\Models\VendaPedido;
+use App\Models\VendaPedidoItem;
 use App\Models\WithdrawalItem;
 use App\Models\WithdrawalRequest;
 use App\Services\AlocacaoEnderecos;
@@ -588,7 +589,14 @@ class WithdrawalRequestController extends Controller
             fn ($a, $b) => $a->id <=> $b->id,
         ]);
 
-        $itens = $ordenados->map(function (WithdrawalItem $i) use ($partes, &$ordem) {
+        // Separação gerada de vendas (Shopee/TikTok): SKU do anúncio de cada produto.
+        $skusVenda = VendaPedidoItem::whereIn('vendas_pedido_id', VendaPedido::where('withdrawal_request_id', $s->id)->select('id'))
+            ->whereNotNull('product_id')
+            ->get(['product_id', 'sku', 'sku_principal'])
+            ->groupBy('product_id')
+            ->map(fn ($g) => $g->map(fn ($v) => $v->sku ?: $v->sku_principal)->filter()->unique()->values()->all());
+
+        $itens = $ordenados->map(function (WithdrawalItem $i) use ($partes, &$ordem, $skusVenda) {
             $ordem[$i->product_id] = ($ordem[$i->product_id] ?? 0) + 1;
             $locais = $i->product ? $this->locaisComSaldo($i->product) : [];
 
@@ -602,6 +610,8 @@ class WithdrawalRequestController extends Controller
                 'product_id'            => $i->product_id,
                 'produto'               => $i->product?->nome,
                 'codigo_microvix'       => $i->codigo_microvix ?: $i->product?->codigo_microvix,
+                'sku'                   => $i->product?->sku,
+                'skus_venda'            => $skusVenda->get($i->product_id, []),
                 'descricao_documento'   => $i->descricao,
                 'quantidade_documento'  => (float) $i->quantidade_documento,
                 'quantidade_solicitada' => (float) $i->quantidade_solicitada,

@@ -153,9 +153,12 @@ class VendasController extends Controller
                     $semProduto[] = ['pedido' => $p->pedido, 'nome' => $it->nomeCompleto(), 'sku' => $it->sku ?: $it->sku_principal, 'quantidade' => $it->quantidade];
                     continue;
                 }
-                $porProduto[$it->product_id] ??= ['product' => $it->product, 'quantidade' => 0.0, 'pedidos' => []];
+                $porProduto[$it->product_id] ??= ['product' => $it->product, 'quantidade' => 0.0, 'pedidos' => [], 'skus_venda' => []];
                 $porProduto[$it->product_id]['quantidade'] += $it->quantidade;
                 $porProduto[$it->product_id]['pedidos'][] = $p->pedido;
+                if ($skuVenda = $it->sku ?: $it->sku_principal) {
+                    $porProduto[$it->product_id]['skus_venda'][] = $skuVenda;
+                }
             }
         }
 
@@ -163,7 +166,13 @@ class VendasController extends Controller
         $linhas = [];
         foreach ($porProduto as $pid => $g) {
             foreach ($this->alocacao->alocar($g['product'], $g['quantidade']) as $parte) {
-                $linhas[] = ['product' => $g['product'], 'location_id' => $parte['location_id'], 'quantidade' => $parte['quantidade'], 'pedidos' => array_values(array_unique($g['pedidos']))];
+                $linhas[] = [
+                    'product'     => $g['product'],
+                    'location_id' => $parte['location_id'],
+                    'quantidade'  => $parte['quantidade'],
+                    'pedidos'     => array_values(array_unique($g['pedidos'])),
+                    'skus_venda'  => array_values(array_unique($g['skus_venda'])),
+                ];
             }
         }
 
@@ -351,6 +360,7 @@ class VendasController extends Controller
                 'nome'            => $l['product']->nome,
                 'sku'             => $l['product']->sku,
                 'codigo_microvix' => $l['product']->codigo_microvix,
+                'skus_venda'      => $l['skus_venda'] ?? [],
                 'estoque'         => $saldo,
                 'retira'          => $l['quantidade'],
                 'fica'            => round($saldo - $l['quantidade'], 2),

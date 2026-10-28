@@ -12,6 +12,7 @@ import {
   excluirSeparacao,
 } from "../services/api";
 import { useAuth } from "../AuthContext";
+import { refProduto } from "../refProduto";
 import useAutoRefresh from "../hooks/useAutoRefresh";
 
 // Intervalo da atualização automática (sem F5).
@@ -545,6 +546,14 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividi
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs text-slate-400">cód. {item.codigo_microvix}</span>
+            {refProduto(item) && <span className="font-mono text-xs text-slate-500">ref. {refProduto(item)}</span>}
+            {(item.skus_venda || [])
+              .filter((sku) => sku !== item.sku && sku !== item.codigo_microvix)
+              .map((sku) => (
+                <span key={sku} className="rounded-full bg-orange-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-orange-700" title="SKU do anúncio (planilha de vendas)">
+                  SKU anúncio {sku}
+                </span>
+              ))}
             {item.partes > 1 && (
               <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600">
                 parte {item.parte} de {item.partes}
