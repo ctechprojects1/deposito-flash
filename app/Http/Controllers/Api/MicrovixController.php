@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\MicrovixBarra;
 use App\Models\MicrovixProduto;
+use App\Models\Product;
 use App\Services\MicrovixService;
+use App\Services\VinculoMicrovix;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 class MicrovixController extends Controller
 {
@@ -25,19 +28,7 @@ class MicrovixController extends Controller
             'codigo' => ['required', 'string', 'max:60'],
         ]);
 
-        $r = $this->microvix->consultar($dados['codigo']);
-
-        // Não está no Microvix: procura na base de apoio (planilha Shopee etc.).
-        if (! $r['encontrado'] && ($c = CatalogoController::porCodigo($dados['codigo']))) {
-            return response()->json([
-                'encontrado'    => true,
-                'produto'       => CatalogoController::formatar($c),
-                'sync_pendente' => false,
-                'mensagem'      => null,
-            ]);
-        }
-
-        return response()->json($r);
+        return response()->json($this->microvix->consultar($dados['codigo']));
     }
 
     /**
@@ -76,6 +67,49 @@ class MicrovixController extends Controller
             'total'     => $barras['total'],
             'produtos'  => $produtos['total'],
             'precos'    => $precos['total'],
+        ]);
+    }
+
+    /**
+     * Liga ao Microvix os produtos que ainda não estão nele (base Shopee ou
+     * cadastro manual). Sem `aplicar`, só mostra o que seria feito.
+     * POST /api/microvix/vincular  { aplicar? }   (só admin)
+     */
+    public function vincular(Request $request, VinculoMicrovix $vinculo): JsonResponse
+    {
+        @set_time_limit(300);
+        $aplicar = $request->boolean('aplicar');
+        $r = $aplicar ? $vinculo->aplicar() : $vinculo->analisar();
+
+        return response()->json($r + [
+            'aplicado' => $aplicar,
+            'message'  => $aplicar
+                ? count($r['vincular']) . ' produto(s) ligado(s) ao Microvix e ' . count($r['juntar']) . ' duplicado(s) juntado(s).'
+                : null,
+        ]);
+    }
+
+    /**
+     * Liga UM produto ao código do Microvix escolhido na tela (para os que a
+     * busca automática não achou ou achou mais de um).
+     * POST /api/microvix/vincular-produto  { product_id, cod_produto }   (só admin)
+     */
+    public function vincularProduto(Request $request, VinculoMicrovix $vinculo): JsonResponse
+    {
+        $dados = $request->validate([
+            'product_id'  => ['required', 'integer', 'exists:products,id'],
+            'cod_produto' => ['required', 'string', 'max:30'],
+        ]);
+
+        try {
+            $p = $vinculo->ligar(Product::findOrFail($dados['product_id']), $dados['cod_produto']);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => "Ligado ao Microvix: {$p->nome} (cód. {$p->codigo_microvix}).",
+            'product' => $p->only(['id', 'nome', 'codigo_microvix', 'sku', 'codigo_barras']),
         ]);
     }
 

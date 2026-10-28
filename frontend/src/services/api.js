@@ -184,24 +184,26 @@ export async function sincronizarMicrovix() {
   return data; // { paginas, upserts, concluido, total }
 }
 
+/** Admin: liga ao Microvix os produtos que ainda não estão nele (aplicar=false só simula). */
+export async function vincularMicrovix(aplicar = false) {
+  const { data } = await api.post("/microvix/vincular", { aplicar }, { timeout: 300000 });
+  return data;
+}
+
+/** Admin: liga um produto ao código do Microvix escolhido. */
+export async function vincularProdutoMicrovix(productId, codProduto) {
+  const { data } = await api.post("/microvix/vincular-produto", { product_id: productId, cod_produto: codProduto });
+  return data;
+}
+
 export async function statusMicrovix() {
   const { data } = await api.get("/microvix/status");
   return data; // { total, ultima_sync, configurado }
 }
 
-/* ===================== Base de apoio (Shopee / planilhas) ===================== */
+/* ===================== Busca no cadastro do Microvix ===================== */
 
-export async function importarCatalogo(fonte, itens) {
-  const { data } = await api.post("/catalogo/importar", { fonte, itens });
-  return data;
-}
-
-export async function statusCatalogo() {
-  const { data } = await api.get("/catalogo/status");
-  return data.data ?? [];
-}
-
-/** Busca por SKU, EAN ou nome na base de apoio. { data, sugestoes } */
+/** Busca por nome, referência ou código no Microvix. { data, sugestoes } */
 export async function buscarCatalogo(q) {
   const { data } = await api.get("/catalogo/buscar", { params: { q } });
   return { data: data.data ?? [], sugestoes: data.sugestoes ?? [] };

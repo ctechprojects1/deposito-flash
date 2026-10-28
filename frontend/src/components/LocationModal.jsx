@@ -752,8 +752,8 @@ export default function LocationModal({ location, onClose, onChanged, podeGerenc
 }
 
 /**
- * Código não achado no Microvix nem na base: procura na base de apoio pelo
- * nome/SKU (tolerante a erro) para o operador escolher o produto certo.
+ * Código não achado no Microvix: procura no cadastro do Microvix pelo
+ * nome/referência (tolerante a erro) para o operador escolher o produto certo.
  */
 function BuscaNaBase({ termoInicial = "", onEscolher }) {
   // Já começa procurando pelo que foi bipado/digitado (ex.: SKU de referência com várias variações).
@@ -784,7 +784,7 @@ function BuscaNaBase({ termoInicial = "", onEscolher }) {
 
   return (
     <div className="mt-3 rounded-lg bg-white p-2 text-slate-700 ring-1 ring-amber-200">
-      <div className="mb-1 text-xs font-semibold text-amber-800">Procurar no Microvix e na base de apoio (Shopee) pelo nome, referência ou SKU:</div>
+      <div className="mb-1 text-xs font-semibold text-amber-800">Procurar no Microvix pelo nome, referência ou código:</div>
       <input
         value={termo}
         onChange={(e) => setTermo(e.target.value)}

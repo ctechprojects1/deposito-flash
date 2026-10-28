@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { criarEnderecos, zerarEstoqueGeral, statusMicrovix, sincronizarMicrovix } from "../services/api";
 import ExcluirEnderecos from "./ExcluirEnderecos";
-import BaseApoio from "./BaseApoio";
+import VincularMicrovix from "./VincularMicrovix";
 
 // Posições comuns em chips. Goiânia: níveis 1-5 x lados A/B (1A, 1B...).
 // São Paulo (ordem alfabética): letras A-E x 1-5 (A1, A2... E5).
@@ -212,8 +212,6 @@ export default function AddressManager({ times = [], posicoes = [], alfabetica =
             </div>
           </div>
 
-          <BaseApoio />
-
           {/* Base local do Microvix: códigos de barras + produtos (nome e referência) */}
           <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-4">
             <h3 className="text-sm font-bold text-slate-700">Microvix — códigos de barras e referências</h3>
@@ -232,6 +230,8 @@ export default function AddressManager({ times = [], posicoes = [], alfabetica =
               {syncMvx || "Sincronizar agora"}
             </button>
           </div>
+
+          <VincularMicrovix />
 
           </>)}
 

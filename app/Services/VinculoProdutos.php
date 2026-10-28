@@ -2,18 +2,17 @@
 
 namespace App\Services;
 
-use App\Models\CatalogoProduto;
-use App\Models\MicrovixBarra;
 use App\Models\MicrovixProduto;
 use App\Models\Product;
+use App\Models\ProdutoSku;
 
 /**
  * Liga o item de uma venda (SKU da Shopee/TikTok) ao produto do sistema.
  * Só aceita um vínculo quando ele é único: SKUs/referências genéricas
  * ("SALDO", "**"...) se repetem e trocariam um produto por outro.
  *
- * Ordem: SKU do produto -> código Microvix igual ao SKU -> EAN da base de
- * apoio (Shopee) -> referência única do Microvix.
+ * Ordem: SKU do produto -> código Microvix igual ao SKU -> SKU antigo da
+ * Shopee guardado no vínculo (produto_skus) -> referência única do Microvix.
  */
 class VinculoProdutos
 {
@@ -46,18 +45,9 @@ class VinculoProdutos
                 return $id;
             }
 
-            // Base de apoio da Shopee: o SKU tem EAN -> produto com esse código de barras
-            // (direto ou pelo código interno do Microvix).
-            $eans = CatalogoProduto::where('sku', $sku)->whereNotNull('ean')->pluck('ean')->unique();
-            if ($eans->count() === 1) {
-                $ean = $eans->first();
-                if ($id = $this->unico(Product::where('codigo_barras', $ean))) {
-                    return $id;
-                }
-                $cod = MicrovixBarra::where('cod_barra', $ean)->value('cod_produto');
-                if ($cod && ($id = $this->unico(Product::where('codigo_microvix', $cod)))) {
-                    return $id;
-                }
+            // SKU antigo da Shopee, guardado quando o produto foi ligado ao Microvix.
+            if ($id = ProdutoSku::where('sku', $sku)->value('product_id')) {
+                return (int) $id;
             }
 
             // Referência do Microvix igual ao SKU, se for de um produto só.
