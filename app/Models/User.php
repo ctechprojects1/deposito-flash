@@ -29,6 +29,7 @@ class User extends Authenticatable
         'gerenciar_enderecos',
         'excluir_enderecos',
         'excluir_separacoes',
+        'vendas',
         'admin',
     ];
 

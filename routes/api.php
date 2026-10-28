@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\VendasController;
 use App\Http\Controllers\Api\WithdrawalRequestController;
 use Illuminate\Support\Facades\Route;
 
@@ -110,6 +111,15 @@ Route::middleware('auth.token')->group(function () {
 
         // Admin: reabrir separação finalizada (com estorno do estoque)
         Route::post('/withdrawal-requests/{withdrawalRequest}/reabrir', [WithdrawalRequestController::class, 'reabrir'])->middleware('perm:admin');
+
+        // Vendas Shopee/TikTok: planilha de pedidos -> separação e lista de embalagem
+        Route::middleware('perm:vendas')->group(function () {
+            Route::get('/vendas', [VendasController::class, 'painel']);
+            Route::post('/vendas/importar', [VendasController::class, 'importar']);
+            Route::post('/vendas/separacao', [VendasController::class, 'separacao']);
+            Route::get('/vendas/embalagem', [VendasController::class, 'embalagem']);
+            Route::post('/vendas/embalar', [VendasController::class, 'embalar']);
+        });
     });
 
     // Administração de usuários (só admin)

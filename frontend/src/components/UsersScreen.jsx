@@ -20,6 +20,7 @@ const PERM_LABELS = {
   gerenciar_enderecos: "Gerenciar endereços",
   excluir_enderecos: "Excluir endereços",
   excluir_separacoes: "Excluir separações",
+  vendas: "Vendas Shopee/TikTok (separação e embalagem)",
   admin: "Administração (usuários)",
 };
 

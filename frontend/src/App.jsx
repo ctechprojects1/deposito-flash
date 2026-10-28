@@ -11,6 +11,7 @@ import InventoryScreen from "./components/InventoryScreen";
 import MovementScreen from "./components/MovementScreen";
 import ReportsScreen from "./components/ReportsScreen";
 import UsersScreen from "./components/UsersScreen";
+import VendasScreen from "./components/VendasScreen";
 import useAutoRefresh from "./hooks/useAutoRefresh";
 import { fetchSolicitacoes } from "./services/api";
 
@@ -19,6 +20,7 @@ const ABAS = [
   { id: "movimentar", label: "Movimentação", perm: "movimentar", componente: MovementScreen },
   { id: "solicitar", label: "Nova Solicitação", perm: "solicitar", componente: RequestForm },
   { id: "separar", label: "Painel do Separador", perm: "separar", componente: PickerDashboard },
+  { id: "vendas", label: "Vendas Shopee", perm: "vendas", componente: VendasScreen },
   { id: "contagem", label: "Contagem", perm: "contar", componente: InventoryScreen },
   { id: "relatorios", label: "Relatórios", perm: "relatorios", componente: ReportsScreen },
   { id: "importar", label: "Importar Estoque", perm: "importar", componente: ImportScreen },

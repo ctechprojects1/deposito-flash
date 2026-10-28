@@ -43,7 +43,7 @@ const MOTIVOS_EXCLUSAO = [
   "Outro",
 ];
 
-const TIPOS = { pedido: "Pedido", nfe: "NF-e", documento_interno: "Doc. interno" };
+const TIPOS = { pedido: "Pedido", nfe: "NF-e", documento_interno: "Doc. interno", shopee: "Vendas Shopee", tiktok: "Vendas TikTok" };
 
 /**
  * Painel do Separador: fila de solicitações + checklist de separação.
@@ -296,7 +296,7 @@ function Checklist({ id, onVoltar }) {
               {s.finalizada_em && <span>Finalizada {s.finalizada_em}</span>}
               {s.reaberta_em && <span>Reaberta {s.reaberta_em} por {s.reaberta_por}</span>}
             </div>
-            {s.observacao && <div className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{s.observacao}</div>}
+            {s.observacao && <div className="mt-2 whitespace-pre-line rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{s.observacao}</div>}
             {s.status === "cancelada" && (
               <div className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
                 <strong>Excluída</strong> por {s.excluida_por} em {s.excluida_em}. Motivo: {s.motivo_exclusao}

@@ -207,6 +207,36 @@ export async function buscarCatalogo(q) {
   return { data: data.data ?? [], sugestoes: data.sugestoes ?? [] };
 }
 
+/* ===================== Vendas Shopee/TikTok ===================== */
+
+/** Situação: a separar, a embalar, pedidos pendentes. */
+export async function painelVendas() {
+  const { data } = await api.get("/vendas");
+  return data;
+}
+
+/** Envia os pedidos lidos da planilha (só os campos necessários). */
+export async function importarVendas(canal, pedidos) {
+  const { data } = await api.post("/vendas/importar", { canal, pedidos });
+  return data;
+}
+
+/** { modo: "novos" | "pagos_apos", pago_apos?, simular? } -> lista de separação. */
+export async function separarVendas(payload) {
+  const { data } = await api.post("/vendas/separacao", payload);
+  return data;
+}
+
+export async function listaEmbalagem(params = {}) {
+  const { data } = await api.get("/vendas/embalagem", { params });
+  return data;
+}
+
+export async function marcarEmbalados(pedidos, desfazer = false) {
+  const { data } = await api.post("/vendas/embalar", { pedidos, desfazer });
+  return data;
+}
+
 /* ===================== Relatórios ===================== */
 
 /** Busca tolerante a erro. Retorna { data: encontrados, sugestoes: parecidos }. */

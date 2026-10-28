@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Deposito;
 use App\Models\Product;
+use App\Models\VendaPedido;
 use App\Models\WithdrawalItem;
 use App\Models\WithdrawalRequest;
+use App\Services\AlocacaoEnderecos;
 use App\Services\BuscaProdutos;
 use App\Services\NotaExtractorService;
 use App\Services\StockService;
@@ -433,6 +435,13 @@ class WithdrawalRequestController extends Controller
             'motivo_exclusao' => trim($dados['motivo']),
         ]);
 
+        // Separação de vendas (Shopee/TikTok) excluída: os pedidos voltam a "a separar".
+        VendaPedido::where('withdrawal_request_id', $s->id)->update([
+            'withdrawal_request_id' => null,
+            'separado_em'           => null,
+            'separado_por_id'       => null,
+        ]);
+
         return response()->json([
             'message' => "Separação #{$s->id} excluída.",
             'data'    => $this->detalhe($s->fresh()),
@@ -502,65 +511,13 @@ class WithdrawalRequestController extends Controller
 
     private function locaisComSaldo(Product $product): array
     {
-        $product->loadMissing('stocks.location');
-
-        return $product->stocks
-            ->where('quantidade', '>', 0)
-            ->sortBy('quantidade')
-            ->map(fn ($st) => [
-                'location_id' => $st->location_id,
-                'nome'        => $st->location?->nome,
-                'quantidade'  => (float) $st->quantidade,
-            ])
-            ->values()
-            ->all();
+        return app(AlocacaoEnderecos::class)->locaisComSaldo($product);
     }
 
-    /**
-     * Divide a quantidade entre endereços:
-     *  - se um endereço comporta tudo: o de MENOR saldo que comporte (esvazia os pequenos);
-     *  - senão: tira tudo do maior e repete com o que falta (ex.: 20 un. com
-     *    endereços de 10 -> 10 + 10), usando o mínimo de endereços.
-     * Se o CD não tem saldo suficiente, a falta fica na última parte (o
-     * separador vê o aviso de saldo). $reservado = [location_id => qtd] já
-     * comprometida por outras linhas da mesma solicitação.
-     *
-     * @return array<int, array{location_id: ?int, quantidade: float}>
-     */
+    /** Divide a quantidade entre endereços (ver AlocacaoEnderecos::alocar). */
     private function alocarEnderecos(Product $product, float $qtd, array $reservado = []): array
     {
-        $livres = [];
-        foreach ($this->locaisComSaldo($product) as $l) { // menor -> maior
-            $q = round($l['quantidade'] - ($reservado[$l['location_id']] ?? 0), 2);
-            if ($q > 0) {
-                $livres[] = ['location_id' => $l['location_id'], 'quantidade' => $q];
-            }
-        }
-        usort($livres, fn ($a, $b) => $a['quantidade'] <=> $b['quantidade']);
-
-        $partes = [];
-        $restante = round($qtd, 2);
-        while ($restante > 0 && $livres) {
-            foreach ($livres as $l) {
-                if ($l['quantidade'] >= $restante) {
-                    $partes[] = ['location_id' => $l['location_id'], 'quantidade' => $restante];
-                    return $partes;
-                }
-            }
-            $maior = array_pop($livres);
-            $partes[] = $maior;
-            $restante = round($restante - $maior['quantidade'], 2);
-        }
-
-        if ($restante > 0) {
-            if ($partes) {
-                $partes[count($partes) - 1]['quantidade'] = round($partes[count($partes) - 1]['quantidade'] + $restante, 2);
-            } else {
-                $partes[] = ['location_id' => null, 'quantidade' => $restante];
-            }
-        }
-
-        return $partes;
+        return app(AlocacaoEnderecos::class)->alocar($product, $qtd, $reservado);
     }
 
     /** Quanto as OUTRAS linhas da solicitação já vão tirar de cada endereço, para este produto. */
