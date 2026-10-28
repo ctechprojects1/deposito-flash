@@ -350,8 +350,8 @@ export async function dividirItemSeparacao(id, itemId) {
 }
 
 /** Finaliza: baixa o estoque de todos os itens. */
-export async function finalizarSeparacao(id) {
-  const { data } = await api.post(`/withdrawal-requests/${id}/finalizar`);
+export async function finalizarSeparacao(id, motivoPendentes = null) {
+  const { data } = await api.post(`/withdrawal-requests/${id}/finalizar`, motivoPendentes ? { motivo_pendentes: motivoPendentes } : {});
   return data;
 }
 

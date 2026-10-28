@@ -13,6 +13,9 @@ class WithdrawalItem extends Model
 {
     use HasFactory;
 
+    /** Motivo de "não separado" para item que saiu do estoque da loja (sem baixa no depósito). */
+    public const MOTIVO_LOJA = 'Separado na loja';
+
     protected $fillable = [
         'withdrawal_request_id',
         'product_id',

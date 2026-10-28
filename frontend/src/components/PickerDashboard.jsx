@@ -160,6 +160,7 @@ function CardSolicitacao({ s, onAbrir }) {
           <span>
             {s.itens_retirados} de {s.total_itens} resolvido(s)
             {s.itens_nao_separados > 0 && <span className="ml-1 font-semibold text-amber-700">· {s.itens_nao_separados} não sep.</span>}
+            {s.itens_na_loja > 0 && <span className="ml-1 font-semibold text-sky-700">· {s.itens_na_loja} na loja</span>}
           </span>
           <span>{pct}%</span>
         </div>
@@ -180,6 +181,7 @@ function Checklist({ id, onVoltar }) {
   const [aviso, setAviso] = useState(null);
   const [atualizadoEm, setAtualizadoEm] = useState(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [finalizandoPendentes, setFinalizandoPendentes] = useState(false);
 
   // Cada ação do usuário muda a "versão": uma atualização automática que
   // saiu antes da ação é descartada, pra não sobrescrever o que ele acabou de fazer.
@@ -318,6 +320,7 @@ function Checklist({ id, onVoltar }) {
             <span>
               {s.itens_retirados} de {s.total_itens} resolvido(s)
               {s.itens_nao_separados > 0 && <span className="ml-1 font-semibold text-amber-700">· {s.itens_nao_separados} não separado(s)</span>}
+              {s.itens_na_loja > 0 && <span className="ml-1 font-semibold text-sky-700">· {s.itens_na_loja} separado(s) na loja</span>}
             </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -366,6 +369,20 @@ function Checklist({ id, onVoltar }) {
         />
       )}
 
+      {finalizandoPendentes && (
+        <FinalizarComPendentesModal
+          id={id}
+          pendentes={s.total_itens - s.itens_retirados}
+          onCancelar={() => setFinalizandoPendentes(false)}
+          onFinalizada={(r) => {
+            versao.current++;
+            setFinalizandoPendentes(false);
+            setS(r.data);
+            setAviso(r.message);
+          }}
+        />
+      )}
+
       {/* Ações */}
       <div className="card-nuvem sticky bottom-4 flex flex-wrap items-center justify-end gap-3 p-4">
         {hasPerm("excluir_separacoes") && !concluida && s.status !== "cancelada" && (
@@ -393,13 +410,18 @@ function Checklist({ id, onVoltar }) {
             </button>
             <button
               className="btn-ok"
-              disabled={!tudoMarcado}
-              title={tudoMarcado ? "" : "Marque cada item como retirado ou como não separado"}
+              disabled={s.total_itens === 0}
+              title={tudoMarcado ? "" : "Ainda há itens pendentes: dá para finalizar informando o motivo"}
               onClick={() => {
-                const aviso = s.itens_nao_separados
+                if (!tudoMarcado) {
+                  setFinalizandoPendentes(true);
+                  return;
+                }
+                const semBaixa = (s.itens_nao_separados || 0) + (s.itens_na_loja || 0);
+                const aviso = semBaixa
                   ? `
 
-${s.itens_nao_separados} item(ns) marcado(s) como NÃO separado(s) ficam registrados com o motivo e não têm baixa.`
+${semBaixa} item(ns) marcado(s) como NÃO separado(s) ou separado(s) na loja ficam registrados com o motivo e não têm baixa no depósito.`
                   : "";
                 if (!window.confirm(`Finalizar a separação? O estoque dos itens retirados será baixado e só um administrador poderá reabrir.${aviso}`)) return;
                 executar("Finalizando e baixando o estoque...", async () => {
@@ -436,8 +458,22 @@ ${s.itens_nao_separados} item(ns) marcado(s) como NÃO separado(s) ficam registr
   );
 }
 
+// Item que saiu do estoque da loja (fora do sistema): conta como "não separado"
+// (sem baixa no depósito), mas aparece como resolvido.
+const SEPARADO_NA_LOJA = "Separado na loja";
+const naLoja = (item) => item.nao_separado && (item.motivo_nao_separado || "").startsWith(SEPARADO_NA_LOJA);
+
+// Motivos prontos para finalizar com itens pendentes (chips) — "Outro" pede texto.
+const MOTIVOS_PENDENTES = [
+  "Pedido cancelado",
+  "Item não encontrado",
+  "Falha no sistema",
+  "Outro",
+];
+
 // Motivos prontos para "não separado" (chips) — "Outro" pede texto.
 const MOTIVOS_NAO_SEPARADO = [
+  SEPARADO_NA_LOJA,
   "Sem estoque no depósito",
   "Não encontrado no endereço",
   "Enviado incorretamente na solicitação",
@@ -448,6 +484,7 @@ const MOTIVOS_NAO_SEPARADO = [
 function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividir }) {
   const marcado = item.retirado;
   const naoSep = item.nao_separado;
+  const loja = naLoja(item);
   const localEscolhido = item.locais.find((l) => l.location_id === item.location_id);
   const semSaldo = !concluida && !naoSep && localEscolhido && localEscolhido.quantidade < item.quantidade_solicitada;
   const semEndereco = !item.location_id;
@@ -472,7 +509,7 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividi
   const podeConfirmar = motivo && (motivo !== "Outro" || detalhe.trim());
 
   return (
-    <div className={`p-3 transition ${marcado ? "bg-emerald-50/60" : naoSep ? "bg-amber-50/70" : ""} ${ocupado ? "opacity-60" : ""}`}>
+    <div className={`p-3 transition ${marcado ? "bg-emerald-50/60" : loja ? "bg-sky-50/70" : naoSep ? "bg-amber-50/70" : ""} ${ocupado ? "opacity-60" : ""}`}>
       <div className="flex flex-wrap items-center gap-3">
         <button
           disabled={!editavel || ocupado || (semEndereco && !marcado)}
@@ -487,17 +524,19 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividi
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition disabled:cursor-not-allowed ${
             marcado
               ? "border-emerald-500 bg-gradient-to-r from-emerald-400 to-teal-500 text-white"
-              : naoSep
+              : loja
+                ? "border-sky-500 bg-gradient-to-r from-sky-400 to-indigo-500 text-white"
+                : naoSep
                 ? "border-amber-400 bg-gradient-to-r from-amber-300 to-orange-400 text-white"
                 : "border-slate-300 bg-white disabled:bg-slate-100"
           }`}
         >
-          {marcado && (
+          {(marcado || loja) && (
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
           )}
-          {naoSep && <span className="text-sm font-black leading-none">!</span>}
+          {naoSep && !loja && <span className="text-sm font-black leading-none">!</span>}
         </button>
 
         <div className="min-w-0 flex-1">
@@ -514,8 +553,19 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividi
           </div>
           {naoSep && (
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">Não separado</span>
-              <span className="text-amber-800">{item.motivo_nao_separado}</span>
+              {loja ? (
+                <>
+                  <span className="rounded-full bg-sky-100 px-2 py-0.5 font-semibold text-sky-800">Separado na loja</span>
+                  <span className="text-sky-800">
+                    {item.motivo_nao_separado.slice(SEPARADO_NA_LOJA.length).replace(/^\s*—\s*/, "") || "sem baixa no depósito"}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">Não separado</span>
+                  <span className="text-amber-800">{item.motivo_nao_separado}</span>
+                </>
+              )}
               {editavel && (
                 <button onClick={() => onAlterar({ nao_separado: false })} disabled={ocupado} className="font-semibold text-indigo-600 hover:underline">
                   desfazer
@@ -524,9 +574,19 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividi
             </div>
           )}
           {editavel && !marcado && !naoSep && !justificando && (
-            <button onClick={abrirJustificativa} disabled={ocupado} className="mt-1 text-xs font-semibold text-amber-700 hover:underline">
-              Não encontrado / não separar
-            </button>
+            <div className="mt-1 flex flex-wrap gap-3">
+              <button onClick={abrirJustificativa} disabled={ocupado} className="text-xs font-semibold text-amber-700 hover:underline">
+                Não encontrado / não separar
+              </button>
+              <button
+                onClick={() => onAlterar({ nao_separado: true, motivo_nao_separado: SEPARADO_NA_LOJA })}
+                disabled={ocupado}
+                title="O item saiu do estoque da loja: não baixa nada do depósito"
+                className="text-xs font-semibold text-sky-700 hover:underline"
+              >
+                Separado na loja
+              </button>
+            </div>
           )}
         </div>
 
@@ -614,6 +674,78 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividi
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Finalizar com itens pendentes: motivo obrigatório; os pendentes ficam como "não separado", sem baixa. */
+function FinalizarComPendentesModal({ id, pendentes, onCancelar, onFinalizada }) {
+  const [motivo, setMotivo] = useState("");
+  const [detalhe, setDetalhe] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  const texto = motivo === "Outro" ? detalhe.trim() : [motivo, detalhe.trim()].filter(Boolean).join(" — ");
+  const valido = motivo && (motivo !== "Outro" || detalhe.trim().length >= 5);
+
+  async function confirmar() {
+    if (!valido) return;
+    setEnviando(true);
+    setErro(null);
+    try {
+      onFinalizada(await finalizarSeparacao(id, texto));
+    } catch (e) {
+      setErro(e?.response?.data?.message || "Não foi possível finalizar.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onCancelar}>
+      <div className="card-nuvem w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-extrabold text-slate-800">Finalizar com {pendentes} item(ns) pendente(s)</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Os itens retirados têm baixa normalmente. Os pendentes ficam registrados como não separados, com o motivo abaixo,
+          e não baixam nada do estoque. Só um administrador poderá reabrir.
+        </p>
+
+        <div className="mt-4 text-sm font-semibold text-slate-700">
+          Motivo <span className="text-rose-500">*</span>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {MOTIVOS_PENDENTES.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMotivo(m)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                motivo === m
+                  ? "bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-md shadow-orange-500/30"
+                  : "bg-slate-100 text-slate-600 hover:bg-amber-50"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={detalhe}
+          onChange={(e) => setDetalhe(e.target.value)}
+          rows={3}
+          maxLength={150}
+          placeholder={motivo === "Outro" ? "Descreva o motivo (obrigatório)" : "Detalhes (opcional)"}
+          className="input-nuvem mt-2"
+        />
+        {erro && <div className="mt-2 rounded-xl bg-rose-100 p-2 text-sm text-rose-800">{erro}</div>}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onCancelar} className="btn-ghost">Cancelar</button>
+          <button onClick={confirmar} disabled={!valido || enviando} className="btn-ok">
+            {enviando ? "Finalizando..." : "Finalizar mesmo assim"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

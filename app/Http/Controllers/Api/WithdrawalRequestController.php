@@ -177,7 +177,9 @@ class WithdrawalRequestController extends Controller
                 'items',
                 // Resolvidos = retirados + marcados como não separados.
                 'items as itens_retirados' => fn ($q) => $q->where(fn ($w) => $w->where('retirado', true)->orWhere('nao_separado', true)),
-                'items as itens_nao_separados' => fn ($q) => $q->where('nao_separado', true),
+                'items as itens_nao_separados' => fn ($q) => $q->where('nao_separado', true)
+                    ->where(fn ($w) => $w->whereNull('motivo_nao_separado')->orWhere('motivo_nao_separado', 'not like', WithdrawalItem::MOTIVO_LOJA . '%')),
+                'items as itens_na_loja' => fn ($q) => $q->where('nao_separado', true)->where('motivo_nao_separado', 'like', WithdrawalItem::MOTIVO_LOJA . '%'),
             ])
             ->with(['solicitante', 'separador', 'excluidaPor'])
             ->latest()
@@ -354,20 +356,27 @@ class WithdrawalRequestController extends Controller
     }
 
     /**
-     * Finaliza: todos os itens marcados -> baixa no estoque (tudo ou nada).
-     * POST .../{id}/finalizar
+     * Finaliza: itens retirados -> baixa no estoque (tudo ou nada).
+     * Itens ainda pendentes só com `motivo_pendentes` (pedido cancelado no meio
+     * do processo, falha...): viram "não separado" com esse motivo, sem baixa.
+     * POST .../{id}/finalizar   { motivo_pendentes? }
      */
-    public function finalizar(WithdrawalRequest $withdrawalRequest, StockService $stock): JsonResponse
+    public function finalizar(Request $request, WithdrawalRequest $withdrawalRequest, StockService $stock): JsonResponse
     {
+        $dados = $request->validate([
+            'motivo_pendentes' => ['nullable', 'string', 'max:200'],
+        ]);
+        $motivoPendentes = trim((string) ($dados['motivo_pendentes'] ?? ''));
+
         $s = $withdrawalRequest->load('items.product', 'items.location');
 
         if ($s->status !== WithdrawalRequest::STATUS_EM_SEPARACAO) {
             return response()->json(['message' => 'Só dá para finalizar uma separação em andamento.'], 409);
         }
 
-        $faltando = $s->items->filter(fn ($i) => ! $i->retirado && ! $i->nao_separado)->count();
-        if ($faltando > 0) {
-            return response()->json(['message' => "Ainda há {$faltando} item(ns) sem check de retirado (ou marque como não separado)."], 422);
+        $pendentes = $s->items->filter(fn ($i) => ! $i->retirado && ! $i->nao_separado);
+        if ($pendentes->isNotEmpty() && $motivoPendentes === '') {
+            return response()->json(['message' => "Ainda há {$pendentes->count()} item(ns) sem check de retirado. Marque-os ou informe o motivo para finalizar com pendências."], 422);
         }
         $retirados = $s->items->where('retirado', true);
         if ($semEndereco = $retirados->firstWhere('location_id', null)) {
@@ -375,7 +384,14 @@ class WithdrawalRequestController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($s, $stock, $retirados) {
+            DB::transaction(function () use ($s, $stock, $retirados, $pendentes, $motivoPendentes) {
+                foreach ($pendentes as $item) {
+                    $item->update([
+                        'nao_separado'        => true,
+                        'motivo_nao_separado' => "Pendente ao finalizar — {$motivoPendentes}",
+                    ]);
+                }
+
                 foreach ($retirados as $item) {
                     $qtd = (float) $item->quantidade_solicitada;
                     try {
@@ -397,7 +413,9 @@ class WithdrawalRequestController extends Controller
         }
 
         return response()->json([
-            'message' => 'Separação finalizada e estoque baixado.',
+            'message' => $pendentes->isNotEmpty()
+                ? "Separação finalizada com {$pendentes->count()} item(ns) pendente(s), sem baixa. O estoque dos retirados foi baixado."
+                : 'Separação finalizada e estoque baixado.',
             'data'    => $this->detalhe($s->fresh()),
         ]);
     }
@@ -547,6 +565,7 @@ class WithdrawalRequestController extends Controller
             'total_itens'      => (int) ($s->items_count ?? 0),
             'itens_retirados'  => (int) ($s->itens_retirados ?? 0),
             'itens_nao_separados' => (int) ($s->itens_nao_separados ?? 0),
+            'itens_na_loja'    => (int) ($s->itens_na_loja ?? 0),
             'criada_em'        => $s->created_at?->format('d/m/Y H:i'),
             'finalizada_em'    => $s->finalizada_em?->format('d/m/Y H:i'),
             'excluida_em'      => $s->excluida_em?->format('d/m/Y H:i'),
@@ -609,8 +628,15 @@ class WithdrawalRequestController extends Controller
             'motivo_exclusao' => $s->motivo_exclusao,
             'total_itens'     => $itens->count(),
             'itens_retirados' => $itens->filter(fn ($i) => $i['retirado'] || $i['nao_separado'])->count(),
-            'itens_nao_separados' => $itens->where('nao_separado', true)->count(),
+            'itens_nao_separados' => $itens->filter(fn ($i) => $i['nao_separado'] && ! $this->naLoja($i))->count(),
+            'itens_na_loja'   => $itens->filter(fn ($i) => $i['nao_separado'] && $this->naLoja($i))->count(),
             'itens'           => $itens,
         ]);
+    }
+
+    /** Item marcado como "Separado na loja" (saiu da loja, sem baixa no depósito). */
+    private function naLoja(array $item): bool
+    {
+        return str_starts_with((string) $item['motivo_nao_separado'], WithdrawalItem::MOTIVO_LOJA);
     }
 }
