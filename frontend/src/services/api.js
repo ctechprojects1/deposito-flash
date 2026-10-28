@@ -252,6 +252,18 @@ export async function buscarProdutosMapa(q) {
 }
 
 /** Histórico de estoque (filtros: de, ate, produto, endereco, tipo, user_id, pagina). */
+/** Mapa do CD atual para planilha (descrição, código, referência, quantidade, preço). */
+export async function relatorioMapa() {
+  const { data } = await api.get("/reports/mapa", { timeout: 120000 });
+  return data; // { data, com_preco, sem_preco }
+}
+
+/** Atualiza um lote da base de preços do Microvix (repetir até `concluido`). */
+export async function atualizarPrecosMapa() {
+  const { data } = await api.post("/reports/mapa/precos", {}, { timeout: 120000 });
+  return data; // { paginas, upserts, concluido, total, configurado }
+}
+
 export async function relatorioHistorico(filtros) {
   const { data } = await api.get("/reports/historico", { params: filtros });
   return data; // { data, total, pagina, tem_mais, tipos, usuarios }

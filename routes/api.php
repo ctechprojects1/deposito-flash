@@ -76,6 +76,8 @@ Route::middleware('auth.token')->group(function () {
         Route::get('/reports/produto-localizacao', [ReportController::class, 'produtoLocalizacao'])->middleware('perm:relatorios');
         Route::get('/products/buscar', [ReportController::class, 'produtoLocalizacao'])->middleware('perm:ver_mapa|movimentar|solicitar|relatorios');
         Route::get('/reports/historico', [ReportController::class, 'historico'])->middleware('perm:relatorios');
+        Route::get('/reports/mapa', [ReportController::class, 'mapa'])->middleware('perm:relatorios');
+        Route::post('/reports/mapa/precos', [ReportController::class, 'atualizarPrecos'])->middleware('perm:relatorios');
         Route::get('/locations/{location}/historico', [ReportController::class, 'historicoEndereco'])->middleware('perm:ver_mapa');
 
         // Contagem / Inventário

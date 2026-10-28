@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { relatorioProdutoLocalizacao } from "../services/api";
+import { atualizarPrecosMapa, relatorioMapa, relatorioProdutoLocalizacao } from "../services/api";
+import { useAuth } from "../AuthContext";
+import { rotuloCD } from "../rotuloCD";
 import HistoricoEstoque from "./HistoricoEstoque";
 import { refProduto } from "../refProduto";
 
@@ -7,6 +9,7 @@ import { refProduto } from "../refProduto";
 const RELATORIOS = [
   { id: "produto_localizacao", label: "Produto × Localização" },
   { id: "historico", label: "Histórico de estoque" },
+  { id: "mapa", label: "Exportar mapa" },
 ];
 
 export default function ReportsScreen() {
@@ -35,6 +38,7 @@ export default function ReportsScreen() {
 
       {relatorio === "produto_localizacao" && <ProdutoLocalizacao />}
       {relatorio === "historico" && <HistoricoEstoque />}
+      {relatorio === "mapa" && <ExportarMapa />}
     </div>
   );
 }
@@ -167,6 +171,118 @@ function ProdutoLocalizacao() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Exporta o mapa do CD atual para Excel: descrição, código, referência, quantidade e preço (Microvix). */
+function ExportarMapa() {
+  const { deposito } = useAuth();
+  const [gerando, setGerando] = useState(false);
+  const [erro, setErro] = useState(null);
+  const [resumo, setResumo] = useState(null);
+
+  async function exportar() {
+    setGerando("Atualizando preços do Microvix...");
+    setErro(null);
+    setResumo(null);
+    try {
+      // Traz do Microvix só os preços que mudaram (na 1ª vez, a base toda, em lotes).
+      let precosAtualizados = true;
+      try {
+        for (let i = 0; i < 15; i++) {
+          const p = await atualizarPrecosMapa();
+          if (!p.configurado) {
+            precosAtualizados = false;
+            break;
+          }
+          setGerando(`Atualizando preços do Microvix... ${Number(p.total).toLocaleString("pt-BR")} produtos`);
+          if (p.concluido) break;
+        }
+      } catch {
+        precosAtualizados = false;
+      }
+
+      setGerando("Gerando planilha...");
+      const r = await relatorioMapa();
+      if (r.data.length === 0) {
+        setErro("Nenhum produto com saldo neste CD.");
+        return;
+      }
+
+      const XLSX = await import("xlsx");
+      const cab = ["Endereço", "Time", "Posição", "Descrição (modelo)", "Código", "Referência", "Quantidade", "Preço de venda", "Valor total"];
+      const linhas = r.data.map((l) => [
+        l.endereco,
+        l.time ?? "",
+        l.posicao ?? "",
+        l.descricao ?? "",
+        l.codigo ?? "",
+        l.referencia ?? "",
+        l.quantidade,
+        l.preco ?? "",
+        l.valor_total ?? "",
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([cab, ...linhas]);
+      ws["!cols"] = [14, 12, 10, 50, 12, 18, 12, 15, 15].map((wch) => ({ wch }));
+      ws["!autofilter"] = { ref: `A1:I${linhas.length + 1}` };
+      // Formato de moeda nas colunas de preço e valor total.
+      for (let i = 2; i <= linhas.length + 1; i++) {
+        for (const c of ["H", "I"]) {
+          if (ws[`${c}${i}`]?.t === "n") ws[`${c}${i}`].z = '"R$" #,##0.00';
+        }
+      }
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Mapa");
+
+      const cd = rotuloCD(deposito?.nome || "CD").replace(/[^\p{L}\p{N}]+/gu, "-");
+      const hoje = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `mapa-${cd}-${hoje}.xlsx`);
+
+      setResumo({
+        linhas: linhas.length,
+        unidades: r.data.reduce((t, l) => t + l.quantidade, 0),
+        valor: r.data.reduce((t, l) => t + (l.valor_total || 0), 0),
+        com_preco: r.com_preco,
+        sem_preco: r.sem_preco,
+        precos_atualizados: precosAtualizados,
+      });
+    } catch (e) {
+      setErro(e?.response?.data?.message || e?.message || "Não foi possível exportar o mapa.");
+    } finally {
+      setGerando(false);
+    }
+  }
+
+  const reais = (n) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  return (
+    <div className="card-nuvem p-5">
+      <h2 className="text-lg font-extrabold text-slate-800">Exportar mapa — {rotuloCD(deposito?.nome || "")}</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Gera uma planilha Excel com cada produto em cada endereço deste CD: descrição (modelo), código, referência,
+        quantidade e o preço de venda atual do Microvix. Para outro CD, troque no topo e exporte de novo.
+      </p>
+      <button type="button" onClick={exportar} disabled={!!gerando} className="btn-nuvem mt-4">
+        {gerando || "Exportar planilha (.xlsx)"}
+      </button>
+
+      {erro && <div className="mt-3 rounded-xl bg-rose-100 p-3 text-sm text-rose-800">{erro}</div>}
+      {resumo && (
+        <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+          Planilha baixada: {resumo.linhas} linha(s), {resumo.unidades.toLocaleString("pt-BR")} unidade(s)
+          {resumo.com_preco && `, valor total ${reais(resumo.valor)}`}.
+          {!resumo.com_preco && (
+            <div className="mt-1 font-semibold text-amber-700">O Microvix não respondeu: a planilha saiu sem preços. Tente de novo em instantes.</div>
+          )}
+          {resumo.com_preco && !resumo.precos_atualizados && (
+            <div className="mt-1 text-amber-700">Não deu para atualizar os preços agora: a planilha usou os últimos preços sincronizados.</div>
+          )}
+          {resumo.com_preco && resumo.sem_preco > 0 && (
+            <div className="mt-1 text-amber-700">{resumo.sem_preco} linha(s) sem preço (produto sem código do Microvix ou sem preço cadastrado).</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Location;
+use App\Models\MicrovixPreco;
 use App\Models\Product;
+use App\Models\Stock;
 use App\Models\StockLog;
 use App\Models\User;
 use App\Services\BuscaProdutos;
+use App\Services\MicrovixService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -30,6 +33,65 @@ class ReportController extends Controller
             'data'      => $r['exatos']->map(fn ($x) => $busca->formatar($x))->values(),
             'sugestoes' => $r['parecidos']->map(fn ($x) => $busca->formatar($x))->values(),
         ]);
+    }
+
+    /**
+     * Mapa do CD atual para planilha: uma linha por produto em cada endereço
+     * (só saldo > 0), com descrição, código, referência, quantidade e o preço
+     * de venda do Microvix (base local; atualize antes com POST .../precos).
+     *
+     * GET /api/reports/mapa   (perm relatorios)
+     */
+    public function mapa(): JsonResponse
+    {
+        $stocks = Stock::query()
+            ->where('quantidade', '>', 0)
+            ->whereHas('location')
+            ->with(['location', 'product'])
+            ->get();
+
+        $precos = MicrovixPreco::whereIn('cod_produto', $stocks->pluck('product.codigo_microvix')->filter()->unique()->values())
+            ->pluck('preco_venda', 'cod_produto');
+
+        $linhas = $stocks->map(function (Stock $s) use ($precos) {
+            $preco = $precos[(string) $s->product?->codigo_microvix] ?? null;
+            $preco = $preco !== null ? (float) $preco : null;
+            $qtd = (float) $s->quantidade;
+
+            return [
+                'endereco'    => $s->location->nome,
+                'time'        => $s->location->corredor,
+                'posicao'     => $s->location->esteira,
+                'descricao'   => $s->product?->nome,
+                'codigo'      => $s->product?->codigo_microvix,
+                'referencia'  => $s->product?->sku,
+                'quantidade'  => $qtd,
+                'preco'       => $preco,
+                'valor_total' => $preco !== null ? round($preco * $qtd, 2) : null,
+            ];
+        })->sort(fn ($a, $b) => strnatcasecmp($a['endereco'], $b['endereco']) ?: strnatcasecmp((string) $a['descricao'], (string) $b['descricao']))
+            ->values();
+
+        return response()->json([
+            'data'       => $linhas,
+            'com_preco'  => MicrovixPreco::exists(),
+            'sem_preco'  => $linhas->whereNull('preco')->count(),
+        ]);
+    }
+
+    /**
+     * Atualiza a base local de preços do Microvix (um lote; repita até
+     * `concluido`). Usado pela exportação do mapa antes de gerar a planilha.
+     *
+     * POST /api/reports/mapa/precos   (perm relatorios)
+     */
+    public function atualizarPrecos(MicrovixService $microvix): JsonResponse
+    {
+        if (! $microvix->configurado()) {
+            return response()->json(['concluido' => true, 'total' => MicrovixPreco::count(), 'configurado' => false]);
+        }
+
+        return response()->json($microvix->sincronizarPrecos(3) + ['configurado' => true]);
     }
 
     /**

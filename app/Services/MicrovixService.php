@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\MicrovixBarra;
+use App\Models\MicrovixPreco;
 use App\Models\MicrovixProduto;
 use App\Models\Product;
 use Illuminate\Support\Facades\Cache;
@@ -310,6 +311,75 @@ class MicrovixService
             'upserts'   => $upserts,
             'concluido' => $concluido,
             'total'     => MicrovixProduto::count(),
+        ];
+    }
+
+    /**
+     * Sincroniza um lote de páginas de LinxProdutosDetalhes (preço de venda e
+     * de custo da empresa) a partir do último timestamp gravado. Precisa de
+     * retornar_saldo_zero=1: sem ele só vêm os produtos com saldo na loja.
+     * Primeira carga ≈ 9 páginas (41 mil produtos); depois, só o que mudou.
+     *
+     * @return array{paginas:int, upserts:int, concluido:bool, total:int}
+     */
+    public function sincronizarPrecos(int $maxPaginas = 3): array
+    {
+        @set_time_limit(120);
+
+        $ts = (int) MicrovixPreco::max('ts');
+        $paginas = 0;
+        $upserts = 0;
+        $concluido = false;
+
+        while ($paginas < $maxPaginas) {
+            $regs = $this->chamar('LinxProdutosDetalhes', [
+                'data_mov_ini'        => '2000-01-01',
+                'data_mov_fim'        => now()->format('Y-m-d'),
+                'timestamp'           => (string) $ts,
+                'retornar_saldo_zero' => '1',
+            ], 90);
+            if (empty($regs)) {
+                $concluido = true;
+                break;
+            }
+            $paginas++;
+
+            $agora = now();
+            $linhas = [];
+            $maxTs = $ts;
+            foreach ($regs as $r) {
+                $cp = trim((string) ($r['cod_produto'] ?? ''));
+                $rts = (int) ($r['timestamp'] ?? 0);
+                $maxTs = max($maxTs, $rts);
+                if ($cp !== '') {
+                    $linhas[$cp] = [
+                        'cod_produto' => $cp,
+                        'preco_venda' => is_numeric($r['preco_venda'] ?? null) ? round((float) $r['preco_venda'], 2) : null,
+                        'preco_custo' => is_numeric($r['preco_custo'] ?? null) ? round((float) $r['preco_custo'], 2) : null,
+                        'ts'          => $rts,
+                        'created_at'  => $agora,
+                        'updated_at'  => $agora,
+                    ];
+                }
+            }
+
+            foreach (array_chunk(array_values($linhas), 500) as $bloco) {
+                MicrovixPreco::upsert($bloco, ['cod_produto'], ['preco_venda', 'preco_custo', 'ts', 'updated_at']);
+            }
+            $upserts += count($linhas);
+
+            if (count($regs) < self::PAGINA || $maxTs <= $ts) {
+                $concluido = true;
+                break;
+            }
+            $ts = $maxTs;
+        }
+
+        return [
+            'paginas'   => $paginas,
+            'upserts'   => $upserts,
+            'concluido' => $concluido,
+            'total'     => MicrovixPreco::count(),
         ];
     }
 

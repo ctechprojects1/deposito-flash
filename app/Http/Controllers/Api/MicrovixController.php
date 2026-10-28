@@ -57,13 +57,25 @@ class MicrovixController extends Controller
         }
 
         $produtos = $this->microvix->sincronizarProdutos(3);
+        if (! $produtos['concluido']) {
+            return response()->json([
+                'paginas'   => $barras['paginas'] + $produtos['paginas'],
+                'upserts'   => $barras['upserts'] + $produtos['upserts'],
+                'concluido' => false,
+                'total'     => $barras['total'],
+                'produtos'  => $produtos['total'],
+            ]);
+        }
+
+        $precos = $this->microvix->sincronizarPrecos(3);
 
         return response()->json([
-            'paginas'   => $barras['paginas'] + $produtos['paginas'],
-            'upserts'   => $barras['upserts'] + $produtos['upserts'],
-            'concluido' => $produtos['concluido'],
+            'paginas'   => $barras['paginas'] + $produtos['paginas'] + $precos['paginas'],
+            'upserts'   => $barras['upserts'] + $produtos['upserts'] + $precos['upserts'],
+            'concluido' => $precos['concluido'],
             'total'     => $barras['total'],
             'produtos'  => $produtos['total'],
+            'precos'    => $precos['total'],
         ]);
     }
 
