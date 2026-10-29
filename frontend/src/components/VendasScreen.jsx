@@ -10,6 +10,13 @@ const msgErro = (e, padrao) => e?.response?.data?.message || e?.message || padra
 const agora = () => new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const un = (n) => `${Number(n || 0).toLocaleString("pt-BR")} un`;
 
+/** Sem saldo neste CD mas tem no CD do mesmo lugar: "Tem no CD Goiânia: SANTOS 1A (5)". */
+function outroCd(l) {
+  const o = l.outros_cds || [];
+  if (!o.length) return null;
+  return `Tem no ${rotuloCD(o[0].cd)}: ${o.map((x) => `${x.nome} (${x.quantidade})`).join(", ")} — escolha no Painel do Separador`;
+}
+
 /** Códigos da linha: cód. interno, referência do sistema e SKU do anúncio (sem repetir). */
 function codigos(l) {
   const ref = refProduto(l);
@@ -189,7 +196,9 @@ function Separacao({ painel, onCriada }) {
       for (const l of g.linhas) {
         h += `<div class="linha"><div class="caixa"></div><div class="corpo"><div class="nome">${esc(l.nome)}</div><div class="meta">${
           l.endereco ? esc(l.endereco) : '<span class="alerta">SEM ENDEREÇO</span>'
-        }${codigos(l).map((c) => ` · ${esc(c)}`).join("")}</div><div class="meta forte">estoque ${l.estoque} · retira ${l.retira} · fica ${l.fica}</div></div><div class="qtd">${l.retira}</div></div>`;
+        }${codigos(l).map((c) => ` · ${esc(c)}`).join("")}</div>${
+          outroCd(l) ? `<div class="meta forte">${esc(outroCd(l))}</div>` : ""
+        }<div class="meta forte">estoque ${l.estoque} · retira ${l.retira} · fica ${l.fica}</div></div><div class="qtd">${l.retira}</div></div>`;
       }
     }
     if (lista.sem_produto?.length) {
@@ -279,6 +288,7 @@ function Separacao({ painel, onCriada }) {
                       {l.endereco || <span className="font-semibold text-rose-600">sem endereço com saldo</span>}
                       {codigos(l).map((c) => ` · ${c}`).join("")}
                     </div>
+                    {outroCd(l) && <div className="text-xs font-semibold text-sky-700">{outroCd(l)}</div>}
                     <div className="text-xs font-bold text-indigo-900">
                       estoque {l.estoque} · retira {l.retira} · fica {l.fica}
                     </div>

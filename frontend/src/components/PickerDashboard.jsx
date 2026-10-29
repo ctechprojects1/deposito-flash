@@ -621,6 +621,9 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividi
           {semEndereco && !naoSep && !concluida && item.locais.length === 0 && (
             <div className="mt-0.5 text-[11px] font-semibold text-rose-600">sem estoque no depósito</div>
           )}
+          {semEndereco && !naoSep && !concluida && item.locais.some((l) => l.cd) && (
+            <div className="mt-0.5 text-[11px] font-semibold text-sky-700">tem em outro CD daqui: escolha na lista</div>
+          )}
           {semSaldo && <div className="mt-0.5 text-[11px] text-amber-600">saldo {localEscolhido.quantidade} no endereço</div>}
           {semSaldo && editavel && !marcado && (
             <button

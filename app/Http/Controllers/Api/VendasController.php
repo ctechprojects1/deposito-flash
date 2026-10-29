@@ -356,6 +356,8 @@ class VendasController extends Controller
                 'endereco'        => $loc?->nome,
                 'time'            => $loc?->corredor,
                 'posicao'         => $loc?->esteira,
+                // Sem saldo neste CD: onde tem no CD do mesmo lugar (o separador escolhe no Painel).
+                'outros_cds'      => $loc ? [] : array_slice($this->alocacao->locaisOutrosCds($l['product']), 0, 3),
                 'product_id'      => $l['product']->id,
                 'nome'            => $l['product']->nome,
                 'sku'             => $l['product']->sku,

@@ -2,7 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\Deposito;
+use App\Models\Location;
 use App\Models\Product;
+use App\Models\Stock;
 
 /**
  * Decide de quais endereços (do CD atual) sai a quantidade de um produto.
@@ -26,6 +29,37 @@ class AlocacaoEnderecos
                 'location_id' => $st->location_id,
                 'nome'        => $st->location?->nome,
                 'quantidade'  => (float) $st->quantidade,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Endereços com saldo do produto nos CDs do mesmo lugar físico (ex.: na
+     * separação do CD - Commerce, os de Goiânia). Não entram na alocação
+     * automática: o separador escolhe na lista se o item estiver lá.
+     *
+     * @return array<int, array{location_id:int, nome:?string, quantidade:float, cd:string}>
+     */
+    public function locaisOutrosCds(Product $product): array
+    {
+        $vizinhos = Deposito::vizinhos();
+        if (! $vizinhos) {
+            return [];
+        }
+
+        return Stock::withoutGlobalScope('deposito')
+            ->where('product_id', $product->id)
+            ->where('quantidade', '>', 0)
+            ->whereIn('location_id', Location::withoutGlobalScope('deposito')->whereIn('deposito_id', array_keys($vizinhos))->select('id'))
+            ->with(['location' => fn ($q) => $q->withoutGlobalScope('deposito')])
+            ->orderByDesc('quantidade')
+            ->get()
+            ->map(fn (Stock $st) => [
+                'location_id' => $st->location_id,
+                'nome'        => $st->location?->nome,
+                'quantidade'  => (float) $st->quantidade,
+                'cd'          => $vizinhos[$st->location?->deposito_id] ?? null,
             ])
             ->values()
             ->all();

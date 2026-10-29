@@ -258,11 +258,13 @@ class WithdrawalRequestController extends Controller
 
         $dados = $request->validate([
             'retirado'            => ['sometimes', 'boolean'],
-            'location_id'         => ['sometimes', 'nullable', 'integer', Rule::exists('locations', 'id')->where('deposito_id', Deposito::atualId())->whereNull('deleted_at')],
+            // Do CD atual ou de um CD no mesmo lugar físico (ex.: Commerce tirando de Goiânia).
+            'location_id'         => ['sometimes', 'nullable', 'integer', Rule::exists('locations', 'id')->whereIn('deposito_id', Deposito::acessiveisNaSeparacao())->whereNull('deleted_at')],
             'nao_separado'        => ['sometimes', 'boolean'],
             'motivo_nao_separado' => ['required_if_accepted:nao_separado', 'nullable', 'string', 'max:255'],
         ], [
             'motivo_nao_separado.required_if_accepted' => 'Informe o motivo de o item não ter sido separado.',
+            'location_id.exists' => 'Este endereço não é deste CD nem de um CD do mesmo lugar.',
         ]);
 
         if (array_key_exists('location_id', $dados)) {
@@ -369,7 +371,7 @@ class WithdrawalRequestController extends Controller
         ]);
         $motivoPendentes = trim((string) ($dados['motivo_pendentes'] ?? ''));
 
-        $s = $withdrawalRequest->load('items.product', 'items.location');
+        $s = $withdrawalRequest->load(['items.product', 'items.location' => fn ($q) => $q->withoutGlobalScope('deposito')]);
 
         if ($s->status !== WithdrawalRequest::STATUS_EM_SEPARACAO) {
             return response()->json(['message' => 'Só dá para finalizar uma separação em andamento.'], 409);
@@ -577,7 +579,18 @@ class WithdrawalRequestController extends Controller
 
     private function detalhe(WithdrawalRequest $s): array
     {
-        $s->load(['items.product.stocks.location', 'items.location', 'solicitante', 'separador', 'reabertaPor', 'excluidaPor']);
+        $s->load([
+            'items.product.stocks.location',
+            'items.location' => fn ($q) => $q->withoutGlobalScope('deposito'), // pode ser de um CD do mesmo lugar
+            'solicitante', 'separador', 'reabertaPor', 'excluidaPor',
+        ]);
+
+        // CDs no mesmo lugar físico: o item pode sair de um endereço deles.
+        $vizinhos = Deposito::vizinhos();
+        $rotuloCd = fn (?string $nome) => $nome && ! preg_match('/^(cd|dep[oó]sito)\b/iu', $nome) ? "CD {$nome}" : $nome;
+        $nomeEndereco = fn ($loc) => $loc && isset($vizinhos[$loc->deposito_id])
+            ? $rotuloCd($vizinhos[$loc->deposito_id]) . ' · ' . $loc->nome
+            : $loc?->nome;
 
         // Linhas do mesmo produto (item dividido entre endereços) ficam juntas,
         // na ordem em que o produto apareceu, com "parte 1 de 2", "2 de 2"...
@@ -596,13 +609,18 @@ class WithdrawalRequestController extends Controller
             ->groupBy('product_id')
             ->map(fn ($g) => $g->map(fn ($v) => $v->sku ?: $v->sku_principal)->filter()->unique()->values()->all());
 
-        $itens = $ordenados->map(function (WithdrawalItem $i) use ($partes, &$ordem, $skusVenda) {
+        $itens = $ordenados->map(function (WithdrawalItem $i) use ($partes, &$ordem, $skusVenda, $vizinhos, $rotuloCd, $nomeEndereco) {
             $ordem[$i->product_id] = ($ordem[$i->product_id] ?? 0) + 1;
             $locais = $i->product ? $this->locaisComSaldo($i->product) : [];
+            if ($i->product && $vizinhos) {
+                foreach (app(AlocacaoEnderecos::class)->locaisOutrosCds($i->product) as $l) {
+                    $locais[] = ['nome' => $rotuloCd($l['cd']) . ' · ' . $l['nome']] + $l;
+                }
+            }
 
             // O endereço escolhido aparece na lista mesmo se ficou sem saldo.
             if ($i->location_id && ! collect($locais)->contains('location_id', $i->location_id)) {
-                $locais[] = ['location_id' => $i->location_id, 'nome' => $i->location?->nome, 'quantidade' => 0];
+                $locais[] = ['location_id' => $i->location_id, 'nome' => $nomeEndereco($i->location), 'quantidade' => 0];
             }
 
             return [
@@ -617,7 +635,7 @@ class WithdrawalRequestController extends Controller
                 'quantidade_solicitada' => (float) $i->quantidade_solicitada,
                 'quantidade_separada'   => (float) $i->quantidade_separada,
                 'location_id'           => $i->location_id,
-                'endereco'              => $i->location?->nome,
+                'endereco'              => $nomeEndereco($i->location),
                 'locais'                => $locais,
                 'retirado'              => (bool) $i->retirado,
                 'nao_separado'          => (bool) $i->nao_separado,

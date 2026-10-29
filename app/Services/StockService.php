@@ -2,7 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\Deposito;
+use App\Models\Location;
 use App\Models\Stock;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -24,7 +27,7 @@ class StockService
         $this->validarQuantidade($quantidade);
 
         return DB::transaction(function () use ($locationId, $productId, $quantidade) {
-            $stock = Stock::query()
+            $stock = $this->query($locationId)
                 ->where('location_id', $locationId)
                 ->where('product_id', $productId)
                 ->lockForUpdate()
@@ -55,7 +58,7 @@ class StockService
         $this->validarQuantidade($quantidade);
 
         return DB::transaction(function () use ($locationId, $productId, $quantidade) {
-            $stock = Stock::query()
+            $stock = $this->query($locationId)
                 ->where('location_id', $locationId)
                 ->where('product_id', $productId)
                 ->lockForUpdate()
@@ -76,6 +79,23 @@ class StockService
 
             return $stock->fresh(['location', 'product']);
         });
+    }
+
+    /**
+     * Estoque do endereço. Fora do CD atual, só se for de um CD do mesmo lugar
+     * físico (a separação pode tirar de lá); qualquer outro endereço é recusado.
+     */
+    private function query(int $locationId): Builder
+    {
+        $q = Stock::query();
+        if (Deposito::atualId() && ! Location::whereKey($locationId)->exists()) {
+            if (! Location::withoutGlobalScope('deposito')->whereKey($locationId)->whereIn('deposito_id', Deposito::acessiveisNaSeparacao())->exists()) {
+                throw new RuntimeException('Este endereço não é deste CD.');
+            }
+            $q = Stock::withoutGlobalScope('deposito');
+        }
+
+        return $q;
     }
 
     private function validarQuantidade(float $quantidade): void
