@@ -212,8 +212,8 @@ export async function buscarCatalogo(q) {
 /* ===================== Vendas Shopee/TikTok ===================== */
 
 /** Situação: a separar, a embalar, pedidos pendentes. */
-export async function painelVendas() {
-  const { data } = await api.get("/vendas");
+export async function painelVendas(canal) {
+  const { data } = await api.get("/vendas", { params: { canal } });
   return data;
 }
 
@@ -234,8 +234,8 @@ export async function listaEmbalagem(params = {}) {
   return data;
 }
 
-export async function marcarEmbalados(pedidos, desfazer = false) {
-  const { data } = await api.post("/vendas/embalar", { pedidos, desfazer });
+export async function marcarEmbalados(pedidos, desfazer = false, canal = undefined) {
+  const { data } = await api.post("/vendas/embalar", { pedidos, desfazer, canal });
   return data;
 }
 

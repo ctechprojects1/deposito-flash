@@ -20,7 +20,7 @@ const ABAS = [
   { id: "movimentar", label: "Movimentação", perm: "movimentar", componente: MovementScreen },
   { id: "solicitar", label: "Nova Solicitação", perm: "solicitar", componente: RequestForm },
   { id: "separar", label: "Painel do Separador", perm: "separar", componente: PickerDashboard },
-  { id: "vendas", label: "Vendas Shopee", perm: "vendas", componente: VendasScreen },
+  { id: "vendas", label: "Vendas Shopee/TikTok", perm: "vendas", componente: VendasScreen },
   { id: "contagem", label: "Contagem", perm: "contar", componente: InventoryScreen },
   { id: "relatorios", label: "Relatórios", perm: "relatorios", componente: ReportsScreen },
   { id: "importar", label: "Importar Estoque", perm: "importar", componente: ImportScreen },

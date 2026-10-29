@@ -10,6 +10,15 @@ const msgErro = (e, padrao) => e?.response?.data?.message || e?.message || padra
 const agora = () => new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const un = (n) => `${Number(n || 0).toLocaleString("pt-BR")} un`;
 
+const CANAIS = { shopee: "Shopee", tiktok: "TikTok" };
+const lerCanal = () => {
+  try {
+    return localStorage.getItem("vendas_canal") === "tiktok" ? "tiktok" : "shopee";
+  } catch {
+    return "shopee";
+  }
+};
+
 /** Sem saldo neste CD mas tem no CD do mesmo lugar: "Tem no CD Goiânia: SANTOS 1A (5)". */
 function outroCd(l) {
   const o = l.outros_cds || [];
@@ -29,48 +38,81 @@ function codigos(l) {
 }
 
 /**
- * Vendas da Shopee: sobe a planilha de pedidos "A Enviar", gera a separação
- * (vai para o Painel do Separador; a baixa sai de cada endereço ao finalizar)
- * e a lista de embalagem (um pacote por pedido, com rastreio e espaço para a NF).
+ * Vendas da Shopee e do TikTok (um canal por vez): sobe a planilha de pedidos
+ * a enviar, gera a separação (vai para o Painel do Separador; a baixa sai de
+ * cada endereço ao finalizar) e a lista de embalagem (um pacote por pedido,
+ * com rastreio e espaço para a NF).
  */
 export default function VendasScreen() {
+  const [canal, setCanal] = useState(lerCanal);
   const [painel, setPainel] = useState(null);
   const [erro, setErro] = useState(null);
 
   async function carregar() {
     try {
-      setPainel(await painelVendas());
+      setPainel(await painelVendas(canal));
     } catch (e) {
       setErro(msgErro(e, "Não foi possível carregar as vendas."));
     }
   }
 
   useEffect(() => {
+    setPainel(null);
     carregar();
-  }, []);
+    try {
+      localStorage.setItem("vendas_canal", canal);
+    } catch {
+      /* sem armazenamento: só não lembra o canal */
+    }
+  }, [canal]);
+
+  // A planilha diz o canal: se for do outro, a tela passa para ele.
+  function importado(r) {
+    if (r.canal && r.canal !== canal) setCanal(r.canal);
+    else setPainel(r);
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 p-4">
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-800">Vendas Shopee</h1>
+        <h1 className="text-2xl font-extrabold text-slate-800">Vendas {CANAIS[canal]}</h1>
         <p className="text-sm text-slate-500">
-          Suba a planilha de pedidos da Shopee para gerar a <b>separação</b> (por endereço) e a <b>lista de embalagem</b> (por pacote).
+          Suba a planilha de pedidos para gerar a <b>separação</b> (por endereço) e a <b>lista de embalagem</b> (por pacote).
+          Cada canal tem a sua separação e a sua lista.
         </p>
+        <div className="mt-3 inline-flex rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200">
+          {Object.entries(CANAIS).map(([id, nome]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setCanal(id)}
+              className={`rounded-full px-5 py-1.5 text-sm font-bold transition ${
+                canal === id
+                  ? id === "tiktok"
+                    ? "bg-slate-900 text-white"
+                    : "bg-gradient-to-r from-orange-500 to-rose-500 text-white"
+                  : "text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              {nome}
+            </button>
+          ))}
+        </div>
       </div>
 
       {erro && <div className="rounded-xl bg-rose-100 p-3 text-sm text-rose-800">{erro}</div>}
 
-      <Importar onImportado={setPainel} />
+      <Importar canal={canal} onImportado={importado} />
       <Resumo painel={painel} />
-      <Separacao painel={painel} onCriada={setPainel} />
-      <Embalagem painel={painel} onMudou={carregar} />
+      <Separacao key={`s-${canal}`} canal={canal} painel={painel} onCriada={setPainel} />
+      <Embalagem key={`e-${canal}`} canal={canal} painel={painel} onMudou={carregar} />
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
 
-function Importar({ onImportado }) {
+function Importar({ canal, onImportado }) {
   const [arquivo, setArquivo] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState(null);
@@ -81,9 +123,9 @@ function Importar({ onImportado }) {
     setResultado(null);
     setEnviando(true);
     try {
-      const pedidos = await lerPlanilhaVendas(arquivo);
-      const r = await importarVendas("shopee", pedidos);
-      setResultado(r.resumo);
+      const lida = await lerPlanilhaVendas(arquivo);
+      const r = await importarVendas(lida.canal, lida.pedidos);
+      setResultado({ ...r.resumo, canal: lida.canal, trocou: lida.canal !== canal });
       onImportado(r);
     } catch (e) {
       setErro(msgErro(e, "Falha ao ler a planilha."));
@@ -96,9 +138,19 @@ function Importar({ onImportado }) {
     <section className="card-nuvem p-5">
       <h2 className="text-lg font-bold text-slate-800">1. Subir planilha de pedidos</h2>
       <p className="mt-1 text-xs text-slate-500">
-        Na Shopee: <b>Meus Pedidos → A Enviar → Exportar</b> e baixe o <code>Order.toship…xlsx</code> no Histórico de
-        Relatórios. Pode subir a mesma planilha mais de uma vez: os pedidos são atualizados (o rastreio entra quando
-        aparecer), nunca duplicados. CPF, telefone e endereço do comprador não são enviados ao sistema.
+        {canal === "tiktok" ? (
+          <>
+            No TikTok Shop: <b>Pedidos → Para enviar → Exportar</b> e baixe o <code>Para enviar pedido-….xlsx</code>.
+          </>
+        ) : (
+          <>
+            Na Shopee: <b>Meus Pedidos → A Enviar → Exportar</b> e baixe o <code>Order.toship…xlsx</code> no Histórico de
+            Relatórios.
+          </>
+        )}{" "}
+        O sistema reconhece sozinho se a planilha é da Shopee ou do TikTok. Pode subir a mesma planilha mais de uma vez: os
+        pedidos são atualizados (o rastreio entra quando aparecer), nunca duplicados. CPF, telefone e endereço do comprador
+        não são enviados ao sistema.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} className="text-sm" />
@@ -109,6 +161,7 @@ function Importar({ onImportado }) {
       {erro && <p className="mt-3 rounded-lg bg-rose-100 p-2 text-sm text-rose-800">{erro}</p>}
       {resultado && (
         <p className="mt-3 rounded-lg bg-emerald-100 p-2 text-sm text-emerald-800">
+          {resultado.trocou && <b>Planilha do {CANAIS[resultado.canal]}: a tela passou para {CANAIS[resultado.canal]}. </b>}
           {resultado.novos} pedido(s) novo(s), {resultado.atualizados} atualizado(s)
           {resultado.ja_separados > 0 && ` (${resultado.ja_separados} já separados: só status/rastreio)`}.
           {resultado.itens_sem_produto > 0 && ` ${resultado.itens_sem_produto} item(ns) sem cadastro no sistema.`}
@@ -145,7 +198,7 @@ function Resumo({ painel }) {
 
 /* ------------------------------------------------------------------ */
 
-function Separacao({ painel, onCriada }) {
+function Separacao({ canal, painel, onCriada }) {
   const { deposito } = useAuth();
   const [modo, setModo] = useState("novos");
   const [pagoApos, setPagoApos] = useState("");
@@ -163,7 +216,7 @@ function Separacao({ painel, onCriada }) {
 
     setCarregando(true);
     try {
-      const r = await separarVendas({ modo, pago_apos: modo === "pagos_apos" ? pagoApos : undefined, simular });
+      const r = await separarVendas({ canal, modo, pago_apos: modo === "pagos_apos" ? pagoApos : undefined, simular });
       setLista(r);
       if (!simular) {
         setMsg(r.message);
@@ -188,7 +241,7 @@ function Separacao({ painel, onCriada }) {
 
   function imprimir() {
     const cd = deposito ? rotuloCD(deposito.nome) : "";
-    let h = `<h1>Lista de Separação — ${esc(cd)}</h1><div class="sub">${lista.pedidos} pedidos · ${lista.unidades} unidades · ${
+    let h = `<h1>Lista de Separação ${esc(CANAIS[canal])} — ${esc(cd)}</h1><div class="sub">${lista.pedidos} pedidos · ${lista.unidades} unidades · ${
       lista.simulacao ? "SÓ CONFERÊNCIA (não gerou separação)" : `separação criada`
     } · impresso em ${esc(agora())}</div>`;
     for (const g of grupos) {
@@ -207,7 +260,7 @@ function Separacao({ painel, onCriada }) {
         h += `<div class="linha"><div class="caixa"></div><div class="corpo"><div class="nome">${esc(s.nome)}</div><div class="meta">SKU ${esc(s.sku)} · pedido ${esc(s.pedido)}</div></div><div class="qtd">${s.quantidade}</div></div>`;
       }
     }
-    imprimirLista("Lista de separação", h);
+    imprimirLista(`Lista de separação ${CANAIS[canal]}`, h);
   }
 
   return (
@@ -316,7 +369,7 @@ function Separacao({ painel, onCriada }) {
 
 /* ------------------------------------------------------------------ */
 
-function Embalagem({ painel, onMudou }) {
+function Embalagem({ canal, painel, onMudou }) {
   const { deposito, user } = useAuth();
   const [soNovos, setSoNovos] = useState(true);
   const [ordem, setOrdem] = useState("cliente");
@@ -329,7 +382,7 @@ function Embalagem({ painel, onMudou }) {
     setErro(null);
     setCarregando(true);
     try {
-      setDados(await listaEmbalagem({ todos: soNovos ? 0 : 1, ordem }));
+      setDados(await listaEmbalagem({ canal, todos: soNovos ? 0 : 1, ordem }));
     } catch (e) {
       setErro(msgErro(e, "Não foi possível montar a lista de embalagem."));
     } finally {
@@ -344,7 +397,7 @@ function Embalagem({ painel, onMudou }) {
 
   async function alternar(p) {
     try {
-      const r = await marcarEmbalados([p.id], p.embalado);
+      const r = await marcarEmbalados([p.id], p.embalado, canal);
       setMsg(r.message);
       await carregar();
       onMudou();
@@ -356,7 +409,7 @@ function Embalagem({ painel, onMudou }) {
   function imprimir(marcar) {
     const pacotes = dados.pacotes;
     const cd = deposito ? rotuloCD(deposito.nome) : "";
-    let h = `<h1>Lista de Embalagem — ${esc(cd)}</h1><div class="sub">${pacotes.length} pacotes · ${dados.itens} itens · impresso em ${esc(agora())}${
+    let h = `<h1>Lista de Embalagem ${esc(CANAIS[canal])} — ${esc(cd)}</h1><div class="sub">${pacotes.length} pacotes · ${dados.itens} itens · impresso em ${esc(agora())}${
       user?.name ? ` por ${esc(user.name)}` : ""
     }</div>`;
     for (const p of pacotes) {
@@ -366,12 +419,12 @@ function Embalagem({ painel, onMudou }) {
         skus ? `<div class="meta">SKU ${esc(skus)}</div>` : ""
       }<div class="meta">${p.rastreio ? `<b>${esc(p.rastreio)}</b>` : '<span class="alerta">SEM RASTREIO</span>'} · ${esc(p.envio || "")} · pedido ${esc(p.pedido)}</div><div class="meta">NF: ______________</div></div><div class="qtd">${p.quantidade}</div></div>`;
     }
-    imprimirLista("Lista de embalagem", h);
+    imprimirLista(`Lista de embalagem ${CANAIS[canal]}`, h);
 
     if (marcar) {
       const ids = pacotes.filter((p) => !p.embalado).map((p) => p.id);
       if (ids.length)
-        marcarEmbalados(ids)
+        marcarEmbalados(ids, false, canal)
           .then((r) => {
             setMsg(`${r.message} Para refazer algum, marque "Mostrar também os já embalados" e desmarque o pacote.`);
             carregar();
@@ -385,8 +438,8 @@ function Embalagem({ painel, onMudou }) {
     <section className="card-nuvem p-5">
       <h2 className="text-lg font-bold text-slate-800">3. Embalagem</h2>
       <p className="mt-1 text-xs text-slate-500">
-        Um pacote por pedido, com cliente, rastreio e espaço para a NF (a NF não vem na planilha da Shopee). Para pegar os
-        rastreios, suba de novo a planilha depois que a Shopee processar os pedidos. Os sem rastreio entram marcados.
+        Um pacote por pedido, com cliente, rastreio e espaço para a NF (a NF não vem na planilha). Para pegar os rastreios,
+        suba de novo a planilha depois que o {CANAIS[canal]} processar os pedidos. Os sem rastreio entram marcados.
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">

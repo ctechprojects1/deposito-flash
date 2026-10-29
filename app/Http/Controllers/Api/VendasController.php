@@ -103,23 +103,23 @@ class VendasController extends Controller
             }
         });
 
-        return response()->json(['resumo' => $r] + $this->dadosPainel());
+        return response()->json(['resumo' => $r, 'canal' => $dados['canal']] + $this->dadosPainel($dados['canal']));
     }
 
     /**
-     * Situação das vendas do CD: a separar, a embalar e os pedidos pendentes.
-     * GET /api/vendas
+     * Situação das vendas do CD (de um canal): a separar, a embalar e os pedidos pendentes.
+     * GET /api/vendas?canal=shopee|tiktok
      */
-    public function painel(): JsonResponse
+    public function painel(Request $request): JsonResponse
     {
-        return response()->json($this->dadosPainel());
+        return response()->json($this->dadosPainel($this->canal($request)));
     }
 
     /**
      * Lista de separação dos pedidos ainda não separados. Com simular=true só
      * monta a lista (não cria nada); senão cria a separação para o Painel do
      * Separador (a baixa sai de cada endereço quando o separador finaliza).
-     * POST /api/vendas/separacao  { modo: novos|pagos_apos, pago_apos?, simular? }
+     * POST /api/vendas/separacao  { canal?, modo: novos|pagos_apos, pago_apos?, simular? }
      */
     public function separacao(Request $request): JsonResponse
     {
@@ -131,7 +131,9 @@ class VendasController extends Controller
             'pago_apos.required_if' => 'Informe a partir de que horário de pagamento.',
         ]);
 
+        $canal = $this->canal($request);
         $pedidos = VendaPedido::query()
+            ->when($canal, fn ($q) => $q->where('canal', $canal))
             ->whereNull('separado_em')
             ->when($dados['modo'] === 'pagos_apos', fn ($q) => $q->where('pago_em', '>', Carbon::parse($dados['pago_apos'])))
             ->with('itens.product')
@@ -228,19 +230,21 @@ class VendasController extends Controller
             'unidades'     => array_sum(array_column($linhas, 'quantidade')) + array_sum(array_column($semProduto, 'quantidade')),
             'linhas'       => $this->formatarLinhas($linhas),
             'sem_produto'  => $semProduto,
-        ] + ($separacao ? $this->dadosPainel() : []));
+        ] + ($separacao ? $this->dadosPainel($canal) : []));
     }
 
     /**
      * Pacotes a embalar (um por pedido), com rastreio e itens.
-     * GET /api/vendas/embalagem?todos=0&ordem=cliente|produto|rastreio
+     * GET /api/vendas/embalagem?canal=&todos=0&ordem=cliente|produto|rastreio
      */
     public function embalagem(Request $request): JsonResponse
     {
         $todos = $request->boolean('todos');
         $ordem = $request->query('ordem', 'cliente');
+        $canal = $this->canal($request);
 
         $pedidos = VendaPedido::query()
+            ->when($canal, fn ($q) => $q->where('canal', $canal))
             ->when(! $todos, fn ($q) => $q->whereNull('embalado_em'))
             ->with('itens.product')
             ->get()
@@ -276,7 +280,7 @@ class VendasController extends Controller
             'itens'        => $pacotes->sum('quantidade'),
             'com_rastreio' => $pacotes->filter(fn ($p) => $p['rastreio'])->count(),
             'sem_rastreio' => $pacotes->reject(fn ($p) => $p['rastreio'])->count(),
-            'ja_embalados' => VendaPedido::whereNotNull('embalado_em')->count(),
+            'ja_embalados' => VendaPedido::when($canal, fn ($q) => $q->where('canal', $canal))->whereNotNull('embalado_em')->count(),
         ]);
     }
 
@@ -301,15 +305,24 @@ class VendasController extends Controller
 
         return response()->json([
             'message' => $desfazer ? "{$n} pacote(s) voltaram para a lista de embalagem." : "{$n} pacote(s) marcados como embalados.",
-        ] + $this->dadosPainel());
+        ] + $this->dadosPainel($this->canal($request)));
     }
 
     /* ====================================================================== */
 
-    private function dadosPainel(): array
+    /** Canal pedido na requisição (shopee|tiktok); null = todos. */
+    private function canal(Request $request): ?string
+    {
+        $c = $request->input('canal');
+
+        return in_array($c, ['shopee', 'tiktok'], true) ? $c : null;
+    }
+
+    private function dadosPainel(?string $canal = null): array
     {
         // Só o que ainda tem trabalho: falta separar ou falta embalar.
         $ativos = VendaPedido::query()
+            ->when($canal, fn ($q) => $q->where('canal', $canal))
             ->where(fn ($q) => $q->whereNull('separado_em')->orWhereNull('embalado_em'))
             ->with('itens')
             ->get()
@@ -322,7 +335,7 @@ class VendasController extends Controller
             'a_embalar'          => $ativos->whereNull('embalado_em')->count(),
             'sem_rastreio'       => $ativos->whereNull('embalado_em')->whereNull('rastreio')->count(),
             'itens_sem_produto'  => $aSeparar->sum(fn ($p) => $p->itens->whereNull('product_id')->count()),
-            'ultima_importacao'  => optional(VendaPedido::max('updated_at'), fn ($d) => Carbon::parse($d)->format('d/m/Y H:i')),
+            'ultima_importacao'  => optional(VendaPedido::when($canal, fn ($q) => $q->where('canal', $canal))->max('updated_at'), fn ($d) => Carbon::parse($d)->format('d/m/Y H:i')),
             'pedidos_a_separar'  => $aSeparar->sortBy('pago_em')->map(fn (VendaPedido $p) => [
                 'id'       => $p->id,
                 'canal'    => $p->canal,
