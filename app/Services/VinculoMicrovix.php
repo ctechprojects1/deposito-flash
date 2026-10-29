@@ -41,7 +41,7 @@ class VinculoMicrovix
     public function analisar(): array
     {
         $vincular = $juntar = $ambiguos = $naoEncontrados = [];
-        $donos = Product::whereIn('codigo_microvix', MicrovixProduto::select('cod_produto'))->pluck('id', 'codigo_microvix')->all();
+        $donos = Product::whereIn('codigo_microvix', $this->ativos())->pluck('id', 'codigo_microvix')->all();
 
         foreach ($this->semVinculo() as $p) {
             $linha = $this->linha($p);
@@ -106,6 +106,9 @@ class VinculoMicrovix
         if (! $mvx) {
             throw new RuntimeException("O código {$cod} não está na base do Microvix. Sincronize e tente de novo.");
         }
+        if ($mvx->desativado) {
+            throw new RuntimeException("O produto {$cod} está desativado no Microvix. Escolha o produto ativo.");
+        }
 
         return DB::transaction(fn () => Historico::com('ajuste', 'Vínculo Microvix', function () use ($p, $mvx) {
             $this->guardarSkus($p, $mvx);
@@ -133,12 +136,12 @@ class VinculoMicrovix
         }, 'Produto ligado ao cadastro do Microvix'));
     }
 
-    /** Produtos cujo código não é de um produto do Microvix. */
+    /** Produtos cujo código não é de um produto ATIVO do Microvix (inclui os ligados a um desativado). */
     private function semVinculo(): Collection
     {
         return Product::query()
             ->where(fn ($q) => $q->whereNull('codigo_microvix')
-                ->orWhereNotIn('codigo_microvix', MicrovixProduto::select('cod_produto')))
+                ->orWhereNotIn('codigo_microvix', $this->ativos()))
             ->orderBy('nome')
             ->get();
     }
@@ -151,6 +154,8 @@ class VinculoMicrovix
             'codigo'     => $p->codigo_microvix,
             'sku'        => $p->sku,
             'barras'     => $p->codigo_barras,
+            // Já estava ligado, mas a um produto desativado no Microvix.
+            'desativado' => $p->codigo_microvix && MicrovixProduto::where('cod_produto', $p->codigo_microvix)->where('desativado', true)->exists(),
             'saldo'      => (float) Stock::withoutGlobalScopes()->where('product_id', $p->id)->sum('quantidade'),
         ];
     }
@@ -160,7 +165,12 @@ class VinculoMicrovix
     {
         $cods = [];
 
-        if ($p->codigo_barras && ($cod = $this->microvix->codProdutoPorBarra($p->codigo_barras))) {
+        // Ligado a um produto desativado: o ativo de mesma referência (recadastro no Microvix).
+        if ($p->codigo_microvix && ($cod = $this->microvix->ativoEquivalente($p->codigo_microvix)) && $cod !== $p->codigo_microvix) {
+            $cods[$cod] = $cod;
+        }
+
+        if ($p->codigo_barras && ($cod = $this->microvix->codProdutoPorBarra($p->codigo_barras)) && ($cod = $this->microvix->ativoEquivalente($cod))) {
             $cods[$cod] = $cod;
         }
 
@@ -168,19 +178,25 @@ class VinculoMicrovix
             // EAN que a planilha da Shopee tinha para esse SKU.
             $eans = CatalogoProduto::where(fn ($q) => $q->where('sku', $sku)->orWhere('sku_pai', $sku))
                 ->whereNotNull('ean')->pluck('ean')->unique();
-            if ($eans->count() === 1 && ($cod = $this->microvix->codProdutoPorBarra($eans->first()))) {
+            if ($eans->count() === 1 && ($cod = $this->microvix->codProdutoPorBarra($eans->first())) && ($cod = $this->microvix->ativoEquivalente($cod))) {
                 $cods[$cod] = $cod;
             }
 
             // Referência do Microvix igual ao SKU, se for de um produto só.
-            $porRef = MicrovixProduto::where('referencia', $sku)->limit(2)->pluck('cod_produto');
+            $porRef = MicrovixProduto::where('referencia', $sku)->where('desativado', false)->limit(2)->pluck('cod_produto');
             if ($porRef->count() === 1) {
                 $cods[$porRef->first()] = $porRef->first();
             }
         }
 
-        // Só vale produto que existe no cadastro do Microvix (base sincronizada).
-        return $cods ? MicrovixProduto::whereIn('cod_produto', array_values($cods))->pluck('cod_produto', 'cod_produto')->all() : [];
+        // Só vale produto ATIVO do cadastro do Microvix (base sincronizada).
+        return $cods ? MicrovixProduto::whereIn('cod_produto', array_values($cods))->where('desativado', false)->pluck('cod_produto', 'cod_produto')->all() : [];
+    }
+
+    /** Subconsulta dos códigos de produtos ativos no Microvix. */
+    private function ativos()
+    {
+        return MicrovixProduto::where('desativado', false)->select('cod_produto');
     }
 
     /** SKU e "código" antigos (na base Shopee o código era o próprio SKU). */

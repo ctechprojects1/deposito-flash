@@ -74,7 +74,8 @@ export default function VincularMicrovix() {
       <p className="mt-1 text-xs text-slate-600">
         Liga ao cadastro do Microvix os produtos que vieram da planilha da Shopee (ou foram cadastrados à mão): pelo código de
         barras, pelo EAN da Shopee ou pela referência igual ao SKU. Eles ficam com código, referência e descrição do Microvix; o
-        SKU antigo continua valendo nas vendas. Rode "Sincronizar agora" antes.
+        SKU antigo continua valendo nas vendas. Só entram produtos ATIVOS do Microvix: quem estiver ligado a um produto
+        desativado aparece aqui de novo para ir para o ativo. Rode "Sincronizar agora" antes.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -112,8 +113,11 @@ export default function VincularMicrovix() {
               <div className="mt-2 max-h-72 space-y-1 overflow-y-auto text-xs">
                 {[...plano.vincular, ...plano.juntar].map((l) => (
                   <div key={l.product_id} className="border-b border-slate-100 py-1">
-                    <div className="text-slate-500 line-through">
-                      {l.nome} · {l.sku || l.codigo || "sem SKU"}
+                    <div className="text-slate-500">
+                      <span className="line-through">
+                        {l.nome} · {l.desativado ? `cód. ${l.codigo}` : l.sku || l.codigo || "sem SKU"}
+                      </span>
+                      {l.desativado && <span className="ml-1 font-semibold text-rose-600">desativado no Microvix</span>}
                     </div>
                     <div className="font-semibold text-slate-800">
                       → {l.novo_nome} · cód. {l.novo_codigo}
@@ -205,6 +209,7 @@ function LigarManual({ linha, onLigado }) {
           <div className="text-[11px] text-slate-500">
             {linha.sku ? `SKU ${linha.sku}` : linha.codigo ? `código ${linha.codigo}` : "sem SKU"}
             {linha.barras && ` · barras ${linha.barras}`} · saldo {un(linha.saldo)}
+            {linha.desativado && <span className="ml-1 font-semibold text-rose-600">· ligado ao cód. {linha.codigo}, desativado no Microvix</span>}
             {linha.opcoes && <span className="ml-1 font-semibold text-amber-700">· {linha.opcoes.length} opções no Microvix</span>}
           </div>
         </div>

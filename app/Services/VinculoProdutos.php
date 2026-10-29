@@ -51,7 +51,7 @@ class VinculoProdutos
             }
 
             // Referência do Microvix igual ao SKU, se for de um produto só.
-            $cods = MicrovixProduto::where('referencia', $sku)->limit(2)->pluck('cod_produto');
+            $cods = MicrovixProduto::where('referencia', $sku)->where('desativado', false)->limit(2)->pluck('cod_produto');
             if ($cods->count() === 1 && ($id = $this->unico(Product::where('codigo_microvix', $cods->first())))) {
                 return $id;
             }

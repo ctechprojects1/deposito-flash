@@ -88,6 +88,13 @@ class MicrovixService
             $codProduto = $this->codProdutoPorBarra($codigo);
         }
 
+        // Produto desativado não vale: troca pelo ativo de mesma referência, se houver um só.
+        $desativado = null;
+        if ($codProduto && ($ativo = $this->ativoEquivalente($codProduto)) !== $codProduto) {
+            $desativado = $codProduto;
+            $codProduto = $ativo;
+        }
+
         $produto = $codProduto ? $this->buscarPorCodigo($codProduto) : null;
         if ($produto) {
             // O código bipado é a fonte da verdade para o código de barras.
@@ -96,17 +103,32 @@ class MicrovixService
 
         // 3) O valor digitado pode ser o código interno (com ou sem zeros à esquerda).
         $semZeros = ltrim($codigo, '0');
-        if (! $produto && ctype_digit($codigo) && $semZeros !== '' && strlen($semZeros) <= 9) {
-            $produto = $this->buscarPorCodigo($semZeros);
+        if (! $produto && ! $desativado && ctype_digit($codigo) && $semZeros !== '' && strlen($semZeros) <= 9) {
+            $ativo = $this->ativoEquivalente($semZeros);
+            if ($ativo === null && MicrovixProduto::where('cod_produto', $semZeros)->exists()) {
+                $desativado = $semZeros;
+            } else {
+                $produto = $this->buscarPorCodigo($ativo ?? $semZeros);
+            }
         }
 
         // 4) Último recurso: a referência (SKU) exata do Microvix — só se for de um
-        //    único produto ("SALDO", "**"... se repetem em centenas de produtos).
-        if (! $produto) {
-            $porRef = MicrovixProduto::where('referencia', $codigo)->limit(2)->pluck('cod_produto');
+        //    único produto ATIVO ("SALDO", "**"... se repetem em centenas de produtos).
+        if (! $produto && ! $desativado) {
+            $porRef = MicrovixProduto::where('referencia', $codigo)->where('desativado', false)->limit(2)->pluck('cod_produto');
             if ($porRef->count() === 1) {
                 $produto = $this->buscarPorCodigo((string) $porRef->first());
             }
+        }
+
+        // Produto inativo no Microvix (e sem um ativo no lugar): não entra no endereço.
+        if ($produto && strtoupper((string) ($produto['desativado'] ?? '')) === 'S') {
+            $desativado = (string) ($produto['cod_produto'] ?? '');
+            $produto = null;
+        }
+        if (! $produto && $desativado) {
+            $resp['mensagem'] = "Produto desativado no Microvix (cód. {$desativado}). Use o produto ativo.";
+            return $resp;
         }
 
         if ($produto) {
@@ -147,6 +169,26 @@ class MicrovixService
             'codigo'   => $codigo,
             'mensagem' => $r['mensagem'],
         ];
+    }
+
+    /**
+     * Código do produto ATIVO para um código do Microvix: o próprio, se ativo;
+     * se desativado, o ativo de mesma referência (quando há um só — o Microvix
+     * recadastra produtos assim); senão null. Código fora da base local volta
+     * como está (não dá para saber).
+     */
+    public function ativoEquivalente(string $cod): ?string
+    {
+        $m = MicrovixProduto::where('cod_produto', $cod)->first(['cod_produto', 'referencia', 'desativado']);
+        if (! $m || ! $m->desativado) {
+            return $cod;
+        }
+        if (! $m->referencia) {
+            return null;
+        }
+        $ativos = MicrovixProduto::where('referencia', $m->referencia)->where('desativado', false)->limit(2)->pluck('cod_produto');
+
+        return $ativos->count() === 1 ? (string) $ativos->first() : null;
     }
 
     public function codProdutoPorBarra(string $codBarra): ?string
@@ -444,6 +486,7 @@ class MicrovixService
         }
 
         $candidatos = MicrovixProduto::query()
+            ->where('desativado', false) // produto inativo é inativo: não aparece na busca
             ->where(function ($q) use ($palavras, $termo) {
                 $q->where('referencia', trim($termo));
                 foreach ($palavras as $w) {
