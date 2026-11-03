@@ -422,7 +422,8 @@ function Embalagem({ canal, painel, onMudou }) {
     imprimirLista(`Lista de embalagem ${CANAIS[canal]}`, h);
 
     if (marcar) {
-      const ids = pacotes.filter((p) => !p.embalado).map((p) => p.id);
+      // Só os já separados podem ser marcados como embalados.
+      const ids = pacotes.filter((p) => !p.embalado && p.separado).map((p) => p.id);
       if (ids.length)
         marcarEmbalados(ids, false, canal)
           .then((r) => {
@@ -477,6 +478,12 @@ function Embalagem({ canal, painel, onMudou }) {
 
       {erro && <p className="mt-3 rounded-lg bg-rose-100 p-2 text-sm text-rose-800">{erro}</p>}
       {msg && <p className="mt-3 rounded-lg bg-emerald-100 p-2 text-sm text-emerald-800">{msg}</p>}
+      {dados?.pacotes?.some((p) => !p.separado && !p.embalado) && (
+        <p className="mt-3 rounded-lg bg-amber-100 p-2 text-sm text-amber-800">
+          {dados.pacotes.filter((p) => !p.separado && !p.embalado).length} pacote(s) ainda não foram separados: eles saem na lista,
+          mas só podem ser marcados como embalados depois de gerar a separação.
+        </p>
+      )}
 
       {dados && (
         <div className="mt-4">
@@ -488,7 +495,14 @@ function Embalagem({ canal, painel, onMudou }) {
           {dados.pacotes.length === 0 && <p className="py-6 text-center text-sm text-slate-400">Nenhum pacote a embalar.</p>}
           {dados.pacotes.map((p) => (
             <div key={p.id} className={`flex items-start gap-3 border-b border-slate-100 px-2 py-2 ${p.embalado ? "opacity-50" : ""}`}>
-              <input type="checkbox" checked={p.embalado} onChange={() => alternar(p)} title={p.embalado ? "Voltar para a lista" : "Marcar como embalado"} className="mt-1 h-4 w-4" />
+              <input
+                type="checkbox"
+                checked={p.embalado}
+                disabled={!p.embalado && !p.separado}
+                onChange={() => alternar(p)}
+                title={p.embalado ? "Voltar para a lista" : p.separado ? "Marcar como embalado" : "Gere a separação deste pedido antes de embalar"}
+                className="mt-1 h-4 w-4 disabled:cursor-not-allowed"
+              />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-bold text-indigo-800">{p.cliente || "(sem nome)"}</div>
                 {p.itens.map((it, i) => (

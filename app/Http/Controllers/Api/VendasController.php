@@ -216,6 +216,10 @@ class VendasController extends Controller
                     'withdrawal_request_id' => $s->id,
                     'separado_em'           => now(),
                     'separado_por_id'       => $request->user()->id,
+                    // Acabou de ser separado: vai para a lista de embalagem (mesmo se
+                    // alguém marcou como embalado antes, por engano).
+                    'embalado_em'           => null,
+                    'embalado_por_id'       => null,
                 ]);
 
                 return $s;
@@ -297,15 +301,21 @@ class VendasController extends Controller
         ]);
 
         $desfazer = (bool) ($dados['desfazer'] ?? false);
+        // Só embala o que já foi separado: marcado antes, o pedido sumia da lista
+        // de embalagem depois de separado.
+        $naoSeparados = $desfazer ? 0 : VendaPedido::whereIn('id', $dados['pedidos'])->whereNull('separado_em')->whereNull('embalado_em')->count();
         $n = VendaPedido::whereIn('id', $dados['pedidos'])
-            ->when(! $desfazer, fn ($q) => $q->whereNull('embalado_em'))
+            ->when(! $desfazer, fn ($q) => $q->whereNull('embalado_em')->whereNotNull('separado_em'))
             ->update($desfazer
                 ? ['embalado_em' => null, 'embalado_por_id' => null]
                 : ['embalado_em' => now(), 'embalado_por_id' => $request->user()->id]);
 
-        return response()->json([
-            'message' => $desfazer ? "{$n} pacote(s) voltaram para a lista de embalagem." : "{$n} pacote(s) marcados como embalados.",
-        ] + $this->dadosPainel($this->canal($request)));
+        $msg = $desfazer ? "{$n} pacote(s) voltaram para a lista de embalagem." : "{$n} pacote(s) marcados como embalados.";
+        if ($naoSeparados) {
+            $msg .= " {$naoSeparados} ainda não separado(s) ficaram na lista: gere a separação deles primeiro.";
+        }
+
+        return response()->json(['message' => $msg] + $this->dadosPainel($this->canal($request)));
     }
 
     /* ====================================================================== */
