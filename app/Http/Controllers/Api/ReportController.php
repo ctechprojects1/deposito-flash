@@ -105,8 +105,9 @@ class ReportController extends Controller
         $f = $request->validate([
             'de'       => ['nullable', 'date'],
             'ate'      => ['nullable', 'date'],
-            'produto'  => ['nullable', 'string', 'max:120'],
-            'endereco' => ['nullable', 'string', 'max:120'],
+            'produto'    => ['nullable', 'string', 'max:120'],
+            'product_id' => ['nullable', 'integer'],
+            'endereco'   => ['nullable', 'string', 'max:120'],
             'tipo'     => ['nullable', Rule::in(array_keys(StockLog::TIPOS))],
             'user_id'  => ['nullable', 'integer'],
             'pagina'   => ['nullable', 'integer', 'min:1'],
@@ -120,10 +121,13 @@ class ReportController extends Controller
             ->when($f['ate'] ?? null, fn ($w, $d) => $w->where('created_at', '<=', "{$d} 23:59:59"))
             ->when($f['tipo'] ?? null, fn ($w, $t) => $w->where('tipo', $t))
             ->when($f['user_id'] ?? null, fn ($w, $u) => $w->where('user_id', $u))
-            ->when(trim($f['produto'] ?? ''), fn ($w, $p) => $w->whereHas('product', fn ($x) => $x
+            ->when($f['product_id'] ?? null, fn ($w, $id) => $w->where('product_id', $id))
+            // Os "ou" entre parênteses: soltos, valiam para qualquer produto.
+            ->when(trim($f['produto'] ?? ''), fn ($w, $p) => $w->whereHas('product', fn ($x) => $x->where(fn ($y) => $y
                 ->where('nome', 'like', "%{$p}%")
                 ->orWhere('codigo_microvix', 'like', "%{$p}%")
-                ->orWhere('codigo_barras', 'like', "%{$p}%")))
+                ->orWhere('codigo_barras', 'like', "%{$p}%")
+                ->orWhere('sku', 'like', "%{$p}%"))))
             ->when(trim($f['endereco'] ?? ''), fn ($w, $e) => $w->whereHas('location', fn ($x) => $x
                 ->where('nome', 'like', "%{$e}%")));
 

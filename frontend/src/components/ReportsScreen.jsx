@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { atualizarPrecosMapa, relatorioMapa, relatorioProdutoLocalizacao } from "../services/api";
+import { atualizarPrecosMapa, relatorioHistorico, relatorioMapa, relatorioProdutoLocalizacao } from "../services/api";
 import { useAuth } from "../AuthContext";
 import { rotuloCD } from "../rotuloCD";
 import HistoricoEstoque from "./HistoricoEstoque";
@@ -168,6 +168,7 @@ function ProdutoLocalizacao() {
                 </tbody>
               </table>
             )}
+            <HistoricoDoProduto productId={p.product_id} />
           </div>
         ))}
       </div>
@@ -280,6 +281,87 @@ function ExportarMapa() {
           )}
           {resumo.com_preco && resumo.sem_preco > 0 && (
             <div className="mt-1 text-amber-700">{resumo.sem_preco} linha(s) sem preço (produto sem código do Microvix ou sem preço cadastrado).</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Histórico de um produto (todas as datas, últimas 100 alterações), aberto no card. */
+function HistoricoDoProduto({ productId }) {
+  const [aberto, setAberto] = useState(false);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  async function abrir() {
+    if (aberto) return setAberto(false);
+    setAberto(true);
+    if (dados) return;
+    setCarregando(true);
+    setErro(null);
+    try {
+      setDados(await relatorioHistorico({ product_id: productId }));
+    } catch (e) {
+      setErro(e?.response?.data?.message || "Não foi possível carregar o histórico.");
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  const num = (n) => Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+
+  return (
+    <div className="mt-3 border-t border-slate-100 pt-3">
+      <button type="button" onClick={abrir} className="text-xs font-semibold text-indigo-600 hover:underline">
+        {aberto ? "Esconder histórico" : "Ver histórico"}
+      </button>
+      {aberto && (
+        <div className="mt-2">
+          {carregando && <p className="text-xs text-slate-500">Carregando...</p>}
+          {erro && <p className="text-xs text-rose-700">{erro}</p>}
+          {dados && dados.data.length === 0 && (
+            <p className="text-xs text-slate-500">
+              Nenhuma alteração registrada neste CD. O histórico só guarda o que mudou depois que ele foi ligado no sistema: o
+              saldo que já estava no endereço antes disso não tem registro.
+            </p>
+          )}
+          {dados && dados.data.length > 0 && (
+            <div className="max-h-80 overflow-y-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 text-slate-500">
+                    <th className="py-1 font-semibold">Data</th>
+                    <th className="py-1 font-semibold">Endereço</th>
+                    <th className="py-1 font-semibold">Tipo</th>
+                    <th className="py-1 text-right font-semibold">Antes → depois</th>
+                    <th className="py-1 font-semibold">Quem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dados.data.map((l) => (
+                    <tr key={l.id} className="border-b border-slate-50 align-top last:border-0">
+                      <td className="whitespace-nowrap py-1 text-slate-600">{l.data}</td>
+                      <td className="py-1 font-medium text-slate-800">{l.endereco}</td>
+                      <td className="py-1 text-slate-700">
+                        {l.tipo_label}
+                        {l.referencia && <span className="block text-[11px] text-slate-400">{l.referencia}</span>}
+                      </td>
+                      <td className="whitespace-nowrap py-1 text-right">
+                        {num(l.antes)} → <b>{num(l.depois)}</b>{" "}
+                        <span className={l.diferenca < 0 ? "text-rose-600" : "text-emerald-600"}>
+                          ({l.diferenca > 0 ? "+" : ""}
+                          {num(l.diferenca)})
+                        </span>
+                      </td>
+                      <td className="py-1 text-slate-600">{l.usuario || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {dados.tem_mais && <p className="mt-1 text-[11px] text-slate-400">Mostrando as 100 mais recentes de {dados.total}.</p>}
+            </div>
           )}
         </div>
       )}

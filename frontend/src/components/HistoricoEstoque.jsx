@@ -93,7 +93,7 @@ export default function HistoricoEstoque() {
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-600">Produto</label>
-          <input value={filtros.produto} onChange={set("produto")} placeholder="Código ou descrição" className="input-nuvem" />
+          <input value={filtros.produto} onChange={set("produto")} placeholder="Código, referência ou descrição" className="input-nuvem" />
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-600">Endereço</label>
@@ -134,7 +134,7 @@ export default function HistoricoEstoque() {
       </div>
 
       {linhas.length === 0 && !carregando ? (
-        <p className="card-nuvem py-10 text-center text-sm text-slate-400">Nenhuma alteração de estoque com esses filtros.</p>
+        <p className="card-nuvem py-10 text-center text-sm text-slate-400">Nenhuma alteração de estoque com esses filtros. Confira o período (De/Até): ele começa nos últimos 7 dias.</p>
       ) : (
         <div className="card-nuvem overflow-x-auto">
           <table className="w-full min-w-[820px] text-left text-sm">
