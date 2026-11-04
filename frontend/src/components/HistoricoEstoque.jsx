@@ -29,12 +29,15 @@ export default function HistoricoEstoque() {
   const [meta, setMeta] = useState({ total: 0, tem_mais: false, pagina: 1, tipos: {}, usuarios: [] });
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
+  // Com produto informado, procura em todas as datas (a "vida do item"); dá para desmarcar.
+  const [todasDatas, setTodasDatas] = useState(false);
 
   async function buscar(pagina = 1) {
     setCarregando(true);
     setErro(null);
     try {
-      const params = Object.fromEntries(Object.entries({ ...filtros, pagina }).filter(([, v]) => v !== ""));
+      const usados = todasDatas ? { ...filtros, de: "", ate: "" } : filtros;
+      const params = Object.fromEntries(Object.entries({ ...usados, pagina }).filter(([, v]) => v !== ""));
       const r = await relatorioHistorico(params);
       setLinhas((atual) => (pagina === 1 ? r.data : [...atual, ...r.data]));
       setMeta({ total: r.total, tem_mais: r.tem_mais, pagina: r.pagina, tipos: r.tipos, usuarios: r.usuarios });
@@ -51,6 +54,14 @@ export default function HistoricoEstoque() {
 
   const set = (campo) => (e) => setFiltros((f) => ({ ...f, [campo]: e.target.value }));
 
+  function setProduto(e) {
+    const v = e.target.value;
+    // Começou a digitar um produto: passa a olhar todas as datas; apagou: volta ao período.
+    if (v.trim() && !filtros.produto.trim()) setTodasDatas(true);
+    if (!v.trim()) setTodasDatas(false);
+    setFiltros((f) => ({ ...f, produto: v }));
+  }
+
   function exportarCsv() {
     const cab = ["Data", "Endereço", "Código", "Produto", "Tipo", "Antes", "Depois", "Diferença", "Usuário", "Referência", "Observação"];
     const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -60,7 +71,7 @@ export default function HistoricoEstoque() {
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `historico-estoque-${filtros.de}-a-${filtros.ate}.csv`;
+    a.download = todasDatas ? `historico-estoque-${filtros.produto.trim().replace(/[^\p{L}\p{N}]+/gu, "-") || "todas-as-datas"}.csv` : `historico-estoque-${filtros.de}-a-${filtros.ate}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -76,11 +87,15 @@ export default function HistoricoEstoque() {
       >
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-600">De</label>
-          <input type="date" value={filtros.de} onChange={set("de")} className="input-nuvem" />
+          <input type="date" value={filtros.de} onChange={set("de")} disabled={todasDatas} className="input-nuvem disabled:opacity-50" />
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-600">Até</label>
-          <input type="date" value={filtros.ate} onChange={set("ate")} className="input-nuvem" />
+          <input type="date" value={filtros.ate} onChange={set("ate")} disabled={todasDatas} className="input-nuvem disabled:opacity-50" />
+          <label className="mt-1 flex items-center gap-1.5 text-xs text-slate-600">
+            <input type="checkbox" checked={todasDatas} onChange={(e) => setTodasDatas(e.target.checked)} />
+            Todas as datas
+          </label>
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-600">Usuário</label>
@@ -93,7 +108,7 @@ export default function HistoricoEstoque() {
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-600">Produto</label>
-          <input value={filtros.produto} onChange={set("produto")} placeholder="Código, referência ou descrição" className="input-nuvem" />
+          <input value={filtros.produto} onChange={setProduto} placeholder="Código, referência ou descrição" className="input-nuvem" />
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-600">Endereço</label>
@@ -134,7 +149,7 @@ export default function HistoricoEstoque() {
       </div>
 
       {linhas.length === 0 && !carregando ? (
-        <p className="card-nuvem py-10 text-center text-sm text-slate-400">Nenhuma alteração de estoque com esses filtros. Confira o período (De/Até): ele começa nos últimos 7 dias.</p>
+        <p className="card-nuvem py-10 text-center text-sm text-slate-400">Nenhuma alteração de estoque com esses filtros.{!todasDatas && " Confira o período (De/Até): ele começa nos últimos 7 dias."}</p>
       ) : (
         <div className="card-nuvem overflow-x-auto">
           <table className="w-full min-w-[820px] text-left text-sm">
