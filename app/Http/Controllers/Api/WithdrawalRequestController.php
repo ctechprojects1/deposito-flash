@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Deposito;
+use App\Models\MicrovixProduto;
 use App\Models\Product;
 use App\Models\VendaPedido;
 use App\Models\VendaPedidoItem;
@@ -11,6 +12,8 @@ use App\Models\WithdrawalItem;
 use App\Models\WithdrawalRequest;
 use App\Services\AlocacaoEnderecos;
 use App\Services\BuscaProdutos;
+use App\Services\ListaCodigosService;
+use App\Services\MicrovixService;
 use App\Services\NotaExtractorService;
 use App\Services\StockService;
 use App\Support\Historico;
@@ -29,7 +32,7 @@ use RuntimeException;
  */
 class WithdrawalRequestController extends Controller
 {
-    private const REGRA_PDF = ['required', 'file', 'max:10240', 'mimes:pdf', 'mimetypes:application/pdf'];
+    private const REGRA_DOCUMENTO = ['required', 'file', 'max:10240', 'mimes:pdf,txt,csv'];
 
     /* ======================================================================
      |  Solicitante
@@ -39,12 +42,16 @@ class WithdrawalRequestController extends Controller
      * Lê o PDF da nota/pedido e devolve os itens cruzados com o depósito.
      * POST /api/withdrawal-requests/extrair  (multipart: documento)
      */
-    public function extrair(Request $request, NotaExtractorService $extrator, BuscaProdutos $busca): JsonResponse
+    public function extrair(Request $request, NotaExtractorService $extrator, BuscaProdutos $busca, ListaCodigosService $lista, MicrovixService $microvix): JsonResponse
     {
-        $request->validate(['documento' => self::REGRA_PDF], [
-            'documento.mimes' => 'Envie a nota ou o pedido em PDF.',
-            'documento.max'   => 'O PDF não pode passar de 10 MB.',
+        $request->validate(['documento' => self::REGRA_DOCUMENTO], [
+            'documento.mimes' => 'Envie a nota ou o pedido em PDF, ou uma lista em TXT (codigo;quantidade).',
+            'documento.max'   => 'O arquivo não pode passar de 10 MB.',
         ]);
+
+        if ($request->file('documento')->guessExtension() !== 'pdf') {
+            return $this->extrairLista($request->file('documento'), $busca, $lista, $microvix);
+        }
 
         $pdf = base64_encode(file_get_contents($request->file('documento')->getRealPath()));
         $lido = $extrator->extrair($pdf);
@@ -75,6 +82,71 @@ class WithdrawalRequestController extends Controller
         ]);
     }
 
+    /** Lista em texto (codigo;quantidade): mesmo retorno do PDF, sem passar pela IA. */
+    private function extrairLista($arquivo, BuscaProdutos $busca, ListaCodigosService $lista, MicrovixService $microvix): JsonResponse
+    {
+        $lido = $lista->ler((string) file_get_contents($arquivo->getRealPath()));
+
+        if (! $lido['itens']) {
+            return response()->json(['message' => 'Não achei nenhuma linha no formato codigo;quantidade neste arquivo.'], 422);
+        }
+
+        // As sugestões de parecidos são pesadas: numa lista longa, só nas primeiras
+        // (a tela tem busca para vincular as demais).
+        $sugestoesRestantes = 30;
+
+        $itens = array_map(function ($it) use ($busca, $microvix, &$sugestoesRestantes) {
+            $cod = $it['codigo'];
+            $product = $this->produtoDaLista($cod, $microvix);
+            $descricao = $product?->nome
+                ?? MicrovixProduto::whereIn('cod_produto', [$cod, ltrim($cod, '0')])->value('nome')
+                ?? "Código {$cod}";
+
+            $item = $this->cruzarComDeposito(['codigo' => $cod, 'descricao' => $descricao, 'quantidade' => $it['quantidade']], $product);
+            $item['codigo_deposito'] = $product?->codigo_microvix;
+            $item['sugestoes'] = [];
+            if (! $product && $sugestoesRestantes-- > 0) {
+                $item['sugestoes'] = $busca->sugerirParaItem($cod, $descricao)
+                    ->map(fn ($x) => $busca->formatar($x))->values()->all();
+            }
+
+            return $item;
+        }, $lido['itens']);
+
+        return response()->json([
+            'data' => [
+                'tipo'      => 'lista',
+                'numero'    => mb_substr(pathinfo($arquivo->getClientOriginalName(), PATHINFO_FILENAME), 0, 100),
+                'destino'   => null,
+                'itens'     => $itens,
+                'ignoradas' => $lido['ignoradas'],
+            ],
+        ]);
+    }
+
+    /**
+     * Produto de um código da lista: código interno (com ou sem zeros), código de
+     * barras (nosso ou do Microvix) ou referência, se for de um produto só.
+     */
+    private function produtoDaLista(string $cod, MicrovixService $microvix): ?Product
+    {
+        $product = Product::whereIn('codigo_microvix', array_unique([$cod, ltrim($cod, '0')]))->first()
+            ?? Product::where('codigo_barras', $cod)->first();
+        if ($product) {
+            return $product;
+        }
+
+        $interno = $microvix->codProdutoPorBarra($cod);
+        $interno = $interno ? $microvix->ativoEquivalente($interno) : null;
+        if ($interno && ($product = Product::where('codigo_microvix', $interno)->first())) {
+            return $product;
+        }
+
+        $porRef = Product::where('sku', $cod)->limit(2)->get();
+
+        return $porRef->count() === 1 ? $porRef->first() : null;
+    }
+
     /**
      * Cria a solicitação só com os itens marcados no checklist.
      * POST /api/withdrawal-requests  (multipart: anexo_nota + campos + itens[])
@@ -94,10 +166,10 @@ class WithdrawalRequestController extends Controller
             'itens.*.quantidade_documento'  => ['nullable', 'numeric', 'min:0'],
             'itens.*.quantidade_solicitada' => ['required', 'numeric', 'gt:0'],
 
-            'anexo_nota' => self::REGRA_PDF,
+            'anexo_nota' => self::REGRA_DOCUMENTO,
         ], [
             'itens.required'  => 'Marque pelo menos um item para retirar do depósito.',
-            'anexo_nota.mimes' => 'O documento deve ser um PDF.',
+            'anexo_nota.mimes' => 'O documento deve ser um PDF ou um TXT.',
         ]);
 
         $caminho = null;
@@ -198,8 +270,8 @@ class WithdrawalRequestController extends Controller
     }
 
     /**
-     * PDF anexado. Servido pela API (com token) porque no HostGator não há
-     * o link public/storage. GET .../{id}/documento
+     * Documento anexado (PDF ou lista em texto). Servido pela API (com token)
+     * porque no HostGator não há o link public/storage. GET .../{id}/documento
      */
     public function documento(WithdrawalRequest $withdrawalRequest)
     {
@@ -208,8 +280,10 @@ class WithdrawalRequestController extends Controller
             return response()->json(['message' => 'Documento não encontrado.'], 404);
         }
 
-        return Storage::disk('public')->response($path, "solicitacao-{$withdrawalRequest->id}.pdf", [
-            'Content-Type' => 'application/pdf',
+        $pdf = str_ends_with(strtolower($path), '.pdf');
+
+        return Storage::disk('public')->response($path, "solicitacao-{$withdrawalRequest->id}." . ($pdf ? 'pdf' : 'txt'), [
+            'Content-Type' => $pdf ? 'application/pdf' : 'text/plain; charset=utf-8',
         ], 'inline');
     }
 
@@ -510,10 +584,11 @@ class WithdrawalRequestController extends Controller
      ====================================================================== */
 
     /** Cruza um item lido do documento com o cadastro/estoque do depósito. */
-    private function cruzarComDeposito(array $it): array
+    private function cruzarComDeposito(array $it, ?Product $achado = null): array
     {
         $cod = $it['codigo'];
-        $product = Product::where('codigo_microvix', $cod)->first()
+        $product = $achado
+            ?? Product::where('codigo_microvix', $cod)->first()
             ?? (ltrim($cod, '0') !== $cod ? Product::where('codigo_microvix', ltrim($cod, '0'))->first() : null);
 
         $locais = $product ? $this->locaisComSaldo($product) : [];

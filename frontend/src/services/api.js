@@ -331,7 +331,7 @@ export async function abrirDocumentoSolicitacao(id) {
   const aba = window.open("", "_blank");
   try {
     const { data } = await api.get(`/withdrawal-requests/${id}/documento`, { responseType: "blob" });
-    const url = URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+    const url = URL.createObjectURL(new Blob([data], { type: data.type || "application/pdf" })); // PDF ou lista TXT
     if (aba) aba.location.href = url;
     else window.location.href = url;
   } catch (e) {

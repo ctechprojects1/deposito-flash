@@ -44,7 +44,7 @@ const MOTIVOS_EXCLUSAO = [
   "Outro",
 ];
 
-const TIPOS = { pedido: "Pedido", nfe: "NF-e", documento_interno: "Doc. interno", shopee: "Vendas Shopee", tiktok: "Vendas TikTok" };
+const TIPOS = { pedido: "Pedido", nfe: "NF-e", documento_interno: "Doc. interno", lista: "Lista TXT", shopee: "Vendas Shopee", tiktok: "Vendas TikTok" };
 
 /**
  * Painel do Separador: fila de solicitações + checklist de separação.

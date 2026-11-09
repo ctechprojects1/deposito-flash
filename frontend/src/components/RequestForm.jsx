@@ -3,10 +3,11 @@ import { extrairDocumento, criarSolicitacao } from "../services/api";
 import BuscaProduto from "./BuscaProduto";
 import { refProduto } from "../refProduto";
 
-const TIPOS = { pedido: "Pedido de venda", nfe: "NF-e", documento_interno: "Documento interno" };
+const TIPOS = { pedido: "Pedido de venda", nfe: "NF-e", documento_interno: "Documento interno", lista: "Lista TXT" };
 
 /**
- * Nova Solicitação: sobe a nota/pedido em PDF -> o sistema lê os itens ->
+ * Nova Solicitação: sobe a nota/pedido em PDF ou uma lista TXT
+ * (codigo;quantidade) -> o sistema lê os itens ->
  * checklist: marca só o que sai do depósito e confirma a quantidade -> envia.
  */
 export default function RequestForm() {
@@ -30,11 +31,12 @@ export default function RequestForm() {
       const r = await extrairDocumento(arquivo);
       setDoc(r);
       setDestino(r.destino || "");
-      // Ninguém começa marcado: o operador escolhe o que sai do depósito.
+      // Na nota ninguém começa marcado: o operador escolhe o que sai do depósito.
+      // Na lista TXT os itens já são os que devem sair: vêm marcados se tiverem saldo.
       const inicial = {};
       r.itens.forEach((it) => {
         const sugerida = it.estoque_total > 0 ? Math.min(it.quantidade, it.estoque_total) : it.quantidade;
-        inicial[it.codigo] = { marcado: false, quantidade: String(sugerida) };
+        inicial[it.codigo] = { marcado: r.tipo === "lista" && it.no_deposito && it.estoque_total > 0, quantidade: String(sugerida) };
       });
       setSel(inicial);
     } catch (e) {
@@ -138,7 +140,7 @@ export default function RequestForm() {
       {(lendo || enviando) && (
         <Carregando
           titulo={lendo ? "Lendo o documento..." : "Enviando solicitação..."}
-          subtitulo={lendo ? "Pode levar até 1 minuto, dependendo do tamanho da nota." : null}
+          subtitulo={lendo && /\.pdf$/i.test(arquivo?.name ?? "") ? "Pode levar até 1 minuto, dependendo do tamanho da nota." : null}
         />
       )}
 
@@ -148,13 +150,14 @@ export default function RequestForm() {
       {/* 1) Documento */}
       {!doc && (
         <div className="card-nuvem p-5">
-          <label className="mb-1 block font-semibold text-slate-700">Nota ou pedido de venda (PDF)</label>
+          <label className="mb-1 block font-semibold text-slate-700">Nota ou pedido de venda (PDF) ou lista (TXT)</label>
           <p className="mb-3 text-sm text-slate-500">
-            O sistema lê os itens do documento e você marca quais saem do depósito.
+            O sistema lê os itens do documento e você marca quais saem do depósito. No TXT, uma linha por item, no formato{" "}
+            <code className="font-mono text-slate-700">codigo;quantidade</code>.
           </p>
           <input
             type="file"
-            accept="application/pdf,.pdf"
+            accept="application/pdf,.pdf,text/plain,.txt,.csv"
             onChange={(e) => {
               setArquivo(e.target.files?.[0] ?? null);
               setSucesso(null);
@@ -195,6 +198,17 @@ export default function RequestForm() {
               </div>
             </div>
           </div>
+
+          {doc.ignoradas?.length > 0 && (
+            <div className="rounded-xl bg-amber-100 p-3 text-sm text-amber-800">
+              <div className="font-semibold">{doc.ignoradas.length} linha(s) fora do formato codigo;quantidade ficaram de fora:</div>
+              <div className="mt-1 max-h-32 overflow-y-auto font-mono text-xs">
+                {doc.ignoradas.map((l) => (
+                  <div key={l}>{l}</div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="card-nuvem divide-y divide-slate-100">
             {doc.itens.map((it) => (
