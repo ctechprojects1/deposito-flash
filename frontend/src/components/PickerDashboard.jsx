@@ -514,7 +514,18 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividi
       <div className="flex flex-wrap items-center gap-3">
         <button
           disabled={!editavel || ocupado || (semEndereco && !marcado)}
-          onClick={() => onAlterar({ retirado: !marcado })}
+          onClick={() => {
+            // Marcar com mais do que o endereço tem travaria a finalização (a baixa não deixa saldo negativo).
+            if (!marcado && semSaldo) {
+              window.alert(
+                `O sistema só tem ${localEscolhido.quantidade} neste endereço e o pedido é ${item.quantidade_solicitada}.\n\n` +
+                  `Use "Completar com outro endereço" ou "Retirei só ${localEscolhido.quantidade}".\n` +
+                  "Se na prateleira tinha mais, corrija o saldo do endereço no Mapa antes de marcar."
+              );
+              return;
+            }
+            onAlterar({ retirado: !marcado });
+          }}
           title={
             semEndereco && !marcado
               ? "Sem endereço com estoque: escolha um endereço ou marque como não separado"
@@ -632,6 +643,25 @@ function ItemSeparacao({ item, editavel, ocupado, concluida, onAlterar, onDividi
               className="mt-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-3 py-1 text-[11px] font-bold text-white shadow-md shadow-orange-500/30 transition hover:-translate-y-0.5 disabled:opacity-60"
             >
               Completar com outro endereço
+            </button>
+          )}
+          {/* O endereço tem menos que o pedido: sai o que tem, o resto fica registrado como faltando. */}
+          {semSaldo && editavel && localEscolhido.quantidade > 0 && (
+            <button
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Retirar só ${localEscolhido.quantidade} de ${item.quantidade_solicitada}?\n\nSai ${localEscolhido.quantidade} deste endereço e os outros ${
+                      item.quantidade_solicitada - localEscolhido.quantidade
+                    } ficam como NÃO separados ("faltou no endereço"), sem baixa.`
+                  )
+                )
+                  onAlterar({ retirado_parcial: localEscolhido.quantidade });
+              }}
+              disabled={ocupado}
+              className="mt-1 block text-[11px] font-bold text-amber-700 hover:underline"
+            >
+              Retirei só {localEscolhido.quantidade}
             </button>
           )}
         </div>

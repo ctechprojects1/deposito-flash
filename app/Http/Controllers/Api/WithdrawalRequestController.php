@@ -319,7 +319,9 @@ class WithdrawalRequestController extends Controller
 
     /**
      * Marca/desmarca um item como retirado e/ou troca o endereço de retirada.
-     * PUT .../{id}/itens/{item}  { retirado?, location_id? }
+     * Com `retirado_parcial` (o endereço tinha menos que o pedido): o item fica
+     * retirado com essa quantidade e o que faltou vira outra linha "não separado".
+     * PUT .../{id}/itens/{item}  { retirado?, retirado_parcial?, location_id? }
      */
     public function atualizarItem(Request $request, WithdrawalRequest $withdrawalRequest, WithdrawalItem $item): JsonResponse
     {
@@ -336,6 +338,7 @@ class WithdrawalRequestController extends Controller
             'location_id'         => ['sometimes', 'nullable', 'integer', Rule::exists('locations', 'id')->whereIn('deposito_id', Deposito::acessiveisNaSeparacao())->whereNull('deleted_at')],
             'nao_separado'        => ['sometimes', 'boolean'],
             'motivo_nao_separado' => ['required_if_accepted:nao_separado', 'nullable', 'string', 'max:255'],
+            'retirado_parcial'    => ['sometimes', 'numeric', 'gt:0'],
         ], [
             'motivo_nao_separado.required_if_accepted' => 'Informe o motivo de o item não ter sido separado.',
             'location_id.exists' => 'Este endereço não é deste CD nem de um CD do mesmo lugar.',
@@ -344,6 +347,32 @@ class WithdrawalRequestController extends Controller
         if (array_key_exists('location_id', $dados)) {
             $item->location_id = $dados['location_id'];
         }
+
+        if (array_key_exists('retirado_parcial', $dados)) {
+            $parcial = round((float) $dados['retirado_parcial'], 2);
+            $pedido = round((float) $item->quantidade_solicitada, 2);
+            if (! $item->location_id) {
+                return response()->json(['message' => 'Este item não tem endereço. Escolha um endereço antes.'], 422);
+            }
+            if ($parcial < $pedido) {
+                DB::transaction(function () use ($item, $parcial, $pedido) {
+                    $falta = $item->replicate(['retirado', 'retirado_em']);
+                    $falta->quantidade_solicitada = round($pedido - $parcial, 2);
+                    $falta->quantidade_separada = 0;
+                    $falta->retirado = false;
+                    $falta->nao_separado = true;
+                    $falta->motivo_nao_separado = "Faltou no endereço: retirado {$this->numero($parcial)} de {$this->numero($pedido)}";
+                    $falta->save();
+
+                    $item->quantidade_solicitada = $parcial;
+                    $item->retirado = true;
+                    $item->retirado_em = now();
+                    $item->save();
+                });
+            }
+            $dados['retirado'] = true;
+        }
+
         if (array_key_exists('retirado', $dados)) {
             if ($dados['retirado'] && ! $item->location_id) {
                 return response()->json([
@@ -475,7 +504,8 @@ class WithdrawalRequestController extends Controller
                         Historico::com('separacao', "Solicitação #{$s->id}",
                             fn () => $stock->baixa($item->location_id, $item->product_id, $qtd), $s->destino);
                     } catch (RuntimeException $e) {
-                        throw new RuntimeException("{$item->product?->nome} em {$item->location?->nome}: {$e->getMessage()}");
+                        throw new RuntimeException("{$item->product?->nome} em {$item->location?->nome}: {$e->getMessage()} "
+                            . 'Use "Retirei só" no item (o resto fica como não separado) ou corrija o saldo do endereço no Mapa.');
                     }
                     $item->update(['quantidade_separada' => $qtd]);
                 }
@@ -735,6 +765,12 @@ class WithdrawalRequestController extends Controller
             'itens_na_loja'   => $itens->filter(fn ($i) => $i['nao_separado'] && $this->naLoja($i))->count(),
             'itens'           => $itens,
         ]);
+    }
+
+    /** 2 -> "2"; 1.5 -> "1,5". */
+    private function numero(float $n): string
+    {
+        return rtrim(rtrim(number_format($n, 2, ',', ''), '0'), ',');
     }
 
     /** Item marcado como "Separado na loja" (saiu da loja, sem baixa no depósito). */
